@@ -26,6 +26,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** REST API of the platform. */
 @RestController
@@ -45,18 +47,21 @@ public class WorkflowController {
     private final AgentExecutionRepository agentExecutionRepository;
     private final ToolExecutionRepository toolExecutionRepository;
     private final WorkflowArtifactCodec codec;
+    private final WorkflowEventStream eventStream;
 
     public WorkflowController(
             DevelopmentWorkflowService workflowService,
             WorkflowStepRepository stepRepository,
             AgentExecutionRepository agentExecutionRepository,
             ToolExecutionRepository toolExecutionRepository,
-            WorkflowArtifactCodec codec) {
+            WorkflowArtifactCodec codec,
+            WorkflowEventStream eventStream) {
         this.workflowService = workflowService;
         this.stepRepository = stepRepository;
         this.agentExecutionRepository = agentExecutionRepository;
         this.toolExecutionRepository = toolExecutionRepository;
         this.codec = codec;
+        this.eventStream = eventStream;
     }
 
     @PostMapping
@@ -86,21 +91,32 @@ public class WorkflowController {
                 .map(WorkflowResponse::from);
     }
 
+    /**
+     * Streams every workflow change, for the list screen.
+     *
+     * <p>Declared before {@code /{id}} for readability only: a literal segment always wins over a
+     * variable one in Spring's pattern comparison.
+     */
+    @GetMapping(path = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamAll() {
+        return eventStream.subscribe(null);
+    }
+
+    /** Streams the changes of one workflow, for its detail screen. */
+    @GetMapping(path = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@PathVariable UUID id) {
+        // Fail with the usual 404 rather than handing back a stream that will never emit anything.
+        workflowService.get(id);
+        return eventStream.subscribe(id);
+    }
+
     @GetMapping("/{id}")
     public WorkflowDetailResponse get(@PathVariable UUID id) {
         WorkflowEntity workflow = workflowService.get(id);
 
         List<WorkflowDetailResponse.StepView> steps =
                 stepRepository.findByWorkflowIdOrderBySequenceNumberAsc(id).stream()
-                        .map(step -> new WorkflowDetailResponse.StepView(
-                                step.getSequenceNumber(),
-                                step.getStatusFrom(),
-                                step.getStatusTo(),
-                                step.getSuccessful(),
-                                step.getDurationMs(),
-                                step.getDetail(),
-                                step.getError(),
-                                step.getStartedAt()))
+                        .map(WorkflowDetailResponse.StepView::from)
                         .toList();
 
         Map<UUID, List<WorkflowDetailResponse.ToolExecutionView>> toolsByExecution =

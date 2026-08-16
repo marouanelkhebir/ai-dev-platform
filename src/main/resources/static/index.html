@@ -6,28 +6,30 @@
   <meta name="color-scheme" content="dark">
   <title>AI Dev Platform</title>
   <style>
-    :root { --page:#07101c; --surface:#0c1827; --surface-raised:#122237; --line:#243750; --text:#edf4fc; --muted:#9aabc0; --accent:#66e0ad; --accent-ink:#042518; --warning:#f4be67; --danger:#ff929a; --blue:#80bfff; }
+    :root { --page:#07101c; --surface:#0c1827; --surface-raised:#122237; --line:#243750; --text:#edf4fc; --muted:#9aabc0; --subtle:#74869d; --accent:#66e0ad; --accent-ink:#042518; --warning:#f4be67; --danger:#ff929a; --blue:#80bfff; }
     * { box-sizing:border-box; }
     body { margin:0; min-width:320px; color:var(--text); background:var(--page); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
     button,input,textarea { font:inherit; }
     button { border:0; border-radius:10px; padding:10px 14px; background:var(--accent); color:var(--accent-ink); font-weight:750; cursor:pointer; transition:transform .16s ease,background .16s ease; }
     button:hover:not(:disabled) { transform:translateY(-1px); background:#85e8bf; }
-    button:focus-visible,input:focus-visible { outline:3px solid #80bfff80; outline-offset:2px; }
+    button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible { outline:3px solid #80bfff80; outline-offset:2px; }
     button:disabled { cursor:not-allowed; opacity:.5; }
     button.secondary { background:#1a2a40; color:var(--text); }
     button.secondary:hover:not(:disabled) { background:#273b55; }
-    button.danger { color:#ffdfe1; background:#50232d; }
-    button.danger:hover:not(:disabled) { background:#6e2d3a; }
     input,textarea { width:100%; border:1px solid #344a66; border-radius:10px; padding:11px 12px; color:var(--text); background:#081524; }
     textarea { min-height:126px; resize:vertical; line-height:1.45; }
-    input::placeholder,textarea::placeholder { color:#74869d; }
+    input::placeholder,textarea::placeholder { color:var(--subtle); }
     a { color:inherit; }
+    h1,h2,h3,p { margin:0; }
+    h1 { max-width:650px; font-size:clamp(28px,4vw,43px); line-height:1.08; letter-spacing:-.04em; }
+    h2 { font-size:18px; letter-spacing:-.02em; }
+    [hidden] { display:none!important; }
     .shell { max-width:1440px; min-height:100vh; margin:auto; padding:0 30px 44px; }
     .topbar { min-height:86px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
     .brand { display:flex; align-items:center; gap:12px; text-decoration:none; }
     .brand-mark { display:grid; width:30px; height:30px; place-items:center; border-radius:9px; background:var(--accent); color:#062519; font-weight:900; letter-spacing:-.08em; }
     .brand strong { display:block; font-size:16px; letter-spacing:-.025em; }
-    .brand span { color:var(--muted); font-size:12px; }
+    .brand span span { color:var(--muted); font-size:12px; }
     .top-actions { display:flex; align-items:center; gap:12px; }
     .key-state { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
     .key-state::before { width:8px; height:8px; border-radius:50%; background:#53667e; content:""; }
@@ -35,16 +37,13 @@
     .layout { display:grid; grid-template-columns:245px minmax(0,1fr); gap:32px; padding-top:32px; }
     .rail { display:flex; flex-direction:column; gap:8px; }
     .nav-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; color:var(--muted); text-decoration:none; font-weight:650; }
+    .nav-item:hover { color:var(--text); background:#102037; }
     .nav-item.active { color:var(--text); background:#13243a; }
     .nav-icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
     .rail-note { margin-top:26px; padding:16px; border:1px solid var(--line); border-radius:14px; color:var(--muted); font-size:13px; }
     .rail-note strong { display:block; color:var(--text); margin-bottom:4px; }
     .content { min-width:0; }
     .page-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin:7px 0 28px; }
-    h1,h2,h3,p { margin:0; }
-    h1 { max-width:650px; font-size:clamp(28px,4vw,43px); line-height:1.08; letter-spacing:-.04em; }
-    h2 { font-size:18px; letter-spacing:-.02em; }
-    h3 { font-size:14px; }
     .intro { max-width:650px; margin-top:9px; color:var(--muted); }
     .workspace { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:22px; align-items:start; }
     .panel { border:1px solid var(--line); border-radius:15px; background:var(--surface); }
@@ -52,18 +51,30 @@
     .panel-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:19px 20px; border-bottom:1px solid var(--line); }
     .panel-head p { margin-top:2px; color:var(--muted); font-size:13px; }
     .workflow-list { min-height:260px; }
-    .workflow { display:grid; grid-template-columns:minmax(130px,1fr) minmax(150px,1.2fr) max-content 132px 20px; align-items:center; gap:16px; width:100%; padding:17px 20px; text-align:left; border-radius:0; border-bottom:1px solid #1c2c42; background:transparent; color:var(--text); font-weight:400; }
+    .workflow { display:grid; grid-template-columns:minmax(130px,1fr) minmax(150px,1.2fr) max-content 132px 20px; align-items:center; gap:16px; width:100%; padding:17px 20px; border-bottom:1px solid #1c2c42; color:var(--text); text-decoration:none; }
     .workflow:last-child { border-bottom:0; }
-    .workflow:hover { transform:none; background:#102037; }
-    .workflow.selected { background:#142943; box-shadow:inset 3px 0 0 var(--accent); }
-    .workflow-ticket { font-weight:800; letter-spacing:-.01em; }
+    .workflow:hover { background:#102037; }
+    .workflow:hover .arrow { color:var(--text); transform:translateX(2px); }
+    .workflow.updated { animation:settle 1.1s cubic-bezier(.16,1,.3,1); }
+    @keyframes settle { 0% { background:#17304d; } 100% { background:transparent; } }
+    .workflow-ticket { font-weight:800; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .workflow-project { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .workflow-date { color:var(--muted); font-size:13px; text-align:right; }
-    .arrow { color:var(--muted); font-size:20px; font-weight:400; }
+    .workflow-date { color:var(--muted); font-size:13px; text-align:right; font-variant-numeric:tabular-nums; }
+    .arrow { color:var(--subtle); font-size:20px; transition:color .16s ease,transform .16s ease; }
     .status { display:inline-flex; width:max-content; align-items:center; gap:7px; border-radius:999px; padding:4px 9px; color:#c6f5da; background:#164430; font-size:12px; font-weight:800; letter-spacing:.01em; }
     .status::before { width:6px; height:6px; border-radius:50%; background:currentColor; content:""; }
-    .status.waiting { color:#ffe0a7; background:#47351a; }.status.failed,.status.cancelled { color:#ffd0d4; background:#522630; }.status.done { color:#cfe0ff; background:#243b60; }.status.idle { color:#c5d1df; background:#26384c; }
-    .empty { display:grid; min-height:260px; place-items:center; padding:36px; text-align:center; color:var(--muted); }.empty strong { display:block; color:var(--text); margin-bottom:5px; }
+    .status.waiting { color:#ffe0a7; background:#47351a; }
+    .status.failed,.status.cancelled { color:#ffd0d4; background:#522630; }
+    .status.done { color:#cfe0ff; background:#243b60; }
+    .status.idle { color:#c5d1df; background:#26384c; }
+    .live { display:inline-flex; align-items:center; gap:8px; min-width:max-content; color:var(--muted); font-size:12px; font-weight:700; }
+    .live-dot { position:relative; width:7px; height:7px; border-radius:50%; background:currentColor; }
+    .live.streaming { color:var(--accent); }
+    .live.streaming .live-dot::after { position:absolute; inset:-4px; border:2px solid currentColor; border-radius:50%; content:""; animation:ping 2s cubic-bezier(.16,1,.3,1) infinite; }
+    .live.retrying { color:var(--warning); }
+    @keyframes ping { 0% { transform:scale(.55); opacity:.7; } 70%,100% { transform:scale(1.5); opacity:0; } }
+    .empty { display:grid; min-height:260px; place-items:center; padding:36px; text-align:center; color:var(--muted); }
+    .empty strong { display:block; color:var(--text); margin-bottom:5px; }
     .create-panel { padding:21px; }
     .create-panel > p { margin:5px 0 20px; color:var(--muted); font-size:13px; }
     .source-switch { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin:-2px 0 18px; padding:4px; border-radius:10px; background:#081524; }
@@ -71,19 +82,24 @@
     .source-switch button[aria-pressed="true"] { background:#1a2d45; color:var(--text); }
     .source-switch button:hover:not(:disabled) { transform:none; background:#14263c; }
     .source-fields[hidden] { display:none; }
-    .field { margin-top:14px; }.field label { display:block; margin-bottom:6px; font-size:13px; font-weight:750; }.field small { display:block; margin-top:5px; color:var(--muted); font-size:12px; }
-    .create-panel button { width:100%; margin-top:20px; }
-    .message { min-height:20px; margin-top:12px; color:var(--muted); font-size:13px; }.message.error { color:var(--danger); }
-    .detail { margin-top:22px; }.detail[hidden] { display:none; }.detail-grid { display:grid; grid-template-columns:1.1fr .9fr; gap:22px; }.detail .panel { padding:21px; }
-    .detail-title { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; margin-bottom:20px; }.detail-title p { margin-top:4px; color:var(--muted); font-size:13px; }
-    .facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }.fact { padding:13px; background:#0a1625; border-radius:10px; }.fact span { display:block; color:var(--muted); font-size:12px; }.fact strong { display:block; overflow-wrap:anywhere; margin-top:3px; font-size:14px; }
-    .timeline { list-style:none; margin:0; padding:0; }.timeline li { display:grid; grid-template-columns:16px 1fr auto; gap:10px; align-items:start; padding:0 0 16px; color:var(--muted); font-size:13px; }.timeline li:last-child { padding-bottom:0; }.timeline-dot { width:9px; height:9px; margin-top:5px; border:2px solid var(--accent); border-radius:50%; }.timeline li.failed .timeline-dot { border-color:var(--danger); }.timeline strong { display:block; color:var(--text); font-size:14px; }.timeline time { color:var(--muted); font-size:12px; white-space:nowrap; }
-    .execution-list { display:grid; gap:10px; }.execution-log { border:1px solid #263b55; border-radius:12px; background:#0a1625; }.execution-log[open] { background:#0c1b2d; }.execution-log summary { display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; padding:13px; cursor:pointer; list-style:none; }.execution-log summary::-webkit-details-marker { display:none; }.execution-log summary:focus-visible { outline:3px solid #80bfff80; outline-offset:2px; border-radius:10px; }.execution-status { width:8px; height:8px; border:2px solid var(--accent); border-radius:50%; }.execution-log.failed .execution-status { border-color:var(--danger); }.execution-summary strong { display:block; font-size:14px; }.execution-summary span { color:var(--muted); font-size:12px; }.execution-duration { color:var(--muted); font-size:12px; white-space:nowrap; }.execution-body { display:grid; gap:12px; padding:0 13px 13px; border-top:1px solid #263b55; }.log-label { margin:12px 0 -7px; color:var(--muted); font-size:12px; font-weight:750; }.log-output { max-height:360px; margin:0; overflow:auto; padding:12px; border:1px solid #243a54; border-radius:9px; background:#07111e; color:#dce8f4; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }.tool-log { border:1px solid #243a54; border-radius:9px; }.tool-log summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px; cursor:pointer; color:var(--text); font-size:13px; font-weight:700; }.tool-log summary span { color:var(--muted); font-size:12px; font-weight:400; }.tool-log[open] summary { border-bottom:1px solid #243a54; }.tool-log .log-output { margin:10px; }.sandbox-log { grid-column:1 / -1; }.sandbox-log .log-output { max-height:440px; }
-    .clarification { grid-column:1 / -1; border-color:#73552a!important; background:#111d2c!important; }.clarification .detail-title { margin-bottom:10px; }.clarification-copy { max-width:72ch; color:var(--muted); font-size:14px; }.clarification textarea { margin-top:16px; min-height:118px; }.clarification-actions { display:flex; align-items:center; gap:14px; margin-top:12px; }.clarification-actions button { margin:0; }.clarification-actions .message { margin:0; }
-    .analyst-feedback { max-width:72ch; margin:18px 0 4px; padding:16px; border:1px solid #394c66; border-radius:12px; background:#0a1625; }.analyst-feedback h3 { margin-bottom:5px; }.analyst-feedback p { color:var(--muted); font-size:14px; }.analyst-feedback strong { color:var(--text); }.analyst-feedback ul { margin:10px 0 0; padding-left:20px; color:#dbe7f3; }.analyst-feedback li + li { margin-top:7px; }
-    .setup { display:grid; min-height:100vh; place-items:center; padding:24px; }#setup[hidden] { display:none!important; }.setup-card { width:min(500px,100%); padding:32px; border:1px solid var(--line); border-radius:18px; background:var(--surface); }.setup-card .brand { margin-bottom:34px; }.setup-card h1 { font-size:31px; }.setup-card p { margin-top:12px; color:var(--muted); }.setup-card label { display:block; margin:25px 0 7px; font-size:13px; font-weight:750; }.setup-card button { width:100%; margin-top:14px; }.help { margin-top:24px!important; padding-top:18px; border-top:1px solid var(--line); font-size:13px; }.help code { color:var(--text); }
-    @media (max-width:980px) { .layout { grid-template-columns:1fr; }.rail { flex-direction:row; }.rail-note { display:none; }.workspace { grid-template-columns:1fr; }.create-panel { max-width:none; }.detail-grid { grid-template-columns:1fr; } }
-    @media (max-width:640px) { .shell { padding:0 17px 30px; }.topbar { min-height:72px; }.key-state { display:none; }.layout { padding-top:20px; gap:19px; }.page-heading { align-items:flex-start; flex-direction:column; margin-bottom:20px; }.page-heading button { width:100%; }.workflow { grid-template-columns:1fr auto; gap:5px 12px; }.workflow-project { grid-column:1; }.workflow-date { grid-column:1; grid-row:3; text-align:left; }.arrow { grid-column:2; grid-row:1 / span 3; }.facts { grid-template-columns:1fr; }.top-actions .secondary { padding:9px 10px; font-size:13px; } }
+    .field { margin-top:14px; }
+    .field label { display:block; margin-bottom:6px; font-size:13px; font-weight:750; }
+    .field small { display:block; margin-top:5px; color:var(--muted); font-size:12px; }
+    .create-panel button[type="submit"] { width:100%; margin-top:20px; }
+    .message { min-height:20px; margin-top:12px; color:var(--muted); font-size:13px; }
+    .message.error { color:var(--danger); }
+    .setup { display:grid; min-height:100vh; place-items:center; padding:24px; }
+    .setup-card { width:min(500px,100%); padding:32px; border:1px solid var(--line); border-radius:18px; background:var(--surface); }
+    .setup-card .brand { margin-bottom:34px; }
+    .setup-card h1 { font-size:31px; }
+    .setup-card > p { margin-top:12px; color:var(--muted); }
+    .setup-card label { display:block; margin:25px 0 7px; font-size:13px; font-weight:750; }
+    .setup-card button { width:100%; margin-top:14px; }
+    .setup-card .help { margin-top:24px; padding-top:18px; border-top:1px solid var(--line); font-size:13px; }
+    .setup-card .help code { color:var(--text); }
+    @media (max-width:980px) { .layout { grid-template-columns:1fr; }.rail { flex-direction:row; }.rail-note { display:none; }.workspace { grid-template-columns:1fr; }.create-panel { max-width:none; } }
+    @media (max-width:640px) { .shell { padding:0 17px 30px; }.topbar { min-height:72px; }.key-state { display:none; }.layout { padding-top:20px; gap:19px; }.page-heading { align-items:flex-start; flex-direction:column; margin-bottom:20px; }.page-heading button { width:100%; }.workflow { grid-template-columns:1fr auto; gap:5px 12px; }.workflow-project { grid-column:1; }.workflow-date { grid-column:1; grid-row:3; text-align:left; }.arrow { grid-column:2; grid-row:1 / span 3; }.top-actions .secondary { padding:9px 10px; font-size:13px; } }
+    @media (prefers-reduced-motion:reduce) { * { animation-duration:.001ms!important; animation-iteration-count:1!important; transition-duration:.001ms!important; } .live.streaming .live-dot::after { opacity:.4; } }
   </style>
 </head>
 <body>
@@ -102,38 +118,108 @@
     <header class="topbar"><a class="brand" href="/"><span class="brand-mark">AI</span><span><strong>AI Dev Platform</strong><span>Console de pilotage</span></span></a><div class="top-actions"><span class="key-state" id="keyState">Clé API non vérifiée</span><button class="secondary" id="disconnect">Déconnecter</button></div></header>
     <div class="layout">
       <nav class="rail" aria-label="Navigation principale">
-        <a class="nav-item active" href="/"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/></svg>Workflows</a>
-        <a class="nav-item" href="/settings.html"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="m19.4 15 .1 1.4-1.7 2.1-1.4-.5a7.3 7.3 0 0 1-1.5.9l-.3 1.4-2.7.4-.7-1.3a7.8 7.8 0 0 1-1.7-.4l-1.1.9-2.4-1.3.2-1.5a7 7 0 0 1-1.1-1.3l-1.4-.1-.7-2.6 1.1-.9a7 7 0 0 1 .2-1.7l-1-1.1L6 7.1l1.4.2a7 7 0 0 1 1.3-1l.1-1.5 2.6-.7.9 1.1a7 7 0 0 1 1.7.2l1.1-1 2.3 1.3-.2 1.4a7 7 0 0 1 1.1 1.4l1.4.1.7 2.6-1.1.9a7 7 0 0 1-.2 1.8Z"/></svg>Paramètres</a>
+        <a class="nav-item active" href="/" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/></svg>Workflows</a>
+        <a class="nav-item" href="/settings.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="m19.4 15 .1 1.4-1.7 2.1-1.4-.5a7.3 7.3 0 0 1-1.5.9l-.3 1.4-2.7.4-.7-1.3a7.8 7.8 0 0 1-1.7-.4l-1.1.9-2.4-1.3.2-1.5a7 7 0 0 1-1.1-1.3l-1.4-.1-.7-2.6 1.1-.9a7 7 0 0 1 .2-1.7l-1-1.1L6 7.1l1.4.2a7 7 0 0 1 1.3-1l.1-1.5 2.6-.7.9 1.1a7 7 0 0 1 1.7.2l1.1-1 2.3 1.3-.2 1.4a7 7 0 0 1 1.1 1.4l1.4.1.7 2.6-1.1.9a7 7 0 0 1-.2 1.8Z"/></svg>Paramètres</a>
         <aside class="rail-note"><strong>Contrôle humain</strong>La fusion reste une action manuelle dans GitLab, même après approbation.</aside>
       </nav>
       <main class="content">
-        <div class="page-heading"><div><h1>Suivez chaque changement, du ticket à la revue.</h1><p class="intro">Lancez un workflow depuis Jira ou décrivez directement votre besoin, puis suivez les décisions des agents.</p></div><button class="secondary" id="refresh">Actualiser</button></div>
-        <div class="workspace"><section class="panel list-panel"><div class="panel-head"><div><h2>Workflows récents</h2><p id="workflowCount">Chargement…</p></div></div><div class="workflow-list" id="workflowList"></div></section><aside class="panel create-panel"><h2>Nouveau workflow</h2><p>Choisissez une source puis lancez le traitement.</p><form id="createForm"><div class="source-switch" role="group" aria-label="Source de la demande"><button type="button" data-source="jira" aria-pressed="true">Ticket Jira</button><button type="button" data-source="message" aria-pressed="false">Message direct</button></div><div class="source-fields" id="jiraFields"><div class="field"><label for="ticket">Ticket Jira</label><input id="ticket" required pattern="[A-Z][A-Z0-9_]+-[0-9]+" placeholder="BANK-1245"><small>Ex. : BANK-1245</small></div></div><div class="source-fields" id="messageFields" hidden><div class="field"><label for="directMessage">Votre demande</label><textarea id="directMessage" maxlength="50000" placeholder="Décrivez le changement attendu, le contexte et les critères de réussite."></textarea><small>Ajoutez les contraintes et les critères d’acceptation utiles.</small></div></div><div class="field"><label for="project">Projet GitLab</label><input id="project" required placeholder="groupe/mon-projet"><small>Chemin GitLab ou identifiant numérique</small></div><button type="submit" id="createButton">Lancer le workflow</button><p class="message" id="createMessage" aria-live="polite"></p></form></aside></div>
-        <section class="detail" id="detail" hidden aria-live="polite"></section>
+        <div class="page-heading"><div><h1>Suivez chaque changement, du ticket à la revue.</h1><p class="intro">Lancez un workflow depuis Jira ou décrivez directement votre besoin, puis ouvrez-le pour suivre les décisions des agents en direct.</p></div><button class="secondary" id="refresh">Actualiser</button></div>
+        <div class="workspace">
+          <section class="panel list-panel"><div class="panel-head"><div><h2>Workflows récents</h2><p id="workflowCount">Chargement…</p></div><span class="live" id="live" hidden><span class="live-dot"></span><span id="liveLabel">Connexion au flux…</span></span></div><div class="workflow-list" id="workflowList"></div></section>
+          <aside class="panel create-panel"><h2>Nouveau workflow</h2><p>Choisissez une source puis lancez le traitement.</p><form id="createForm"><div class="source-switch" role="group" aria-label="Source de la demande"><button type="button" data-source="jira" aria-pressed="true">Ticket Jira</button><button type="button" data-source="message" aria-pressed="false">Message direct</button></div><div class="source-fields" id="jiraFields"><div class="field"><label for="ticket">Ticket Jira</label><input id="ticket" required pattern="[A-Z][A-Z0-9_]+-[0-9]+" placeholder="BANK-1245"><small>Ex. : BANK-1245</small></div></div><div class="source-fields" id="messageFields" hidden><div class="field"><label for="directMessage">Votre demande</label><textarea id="directMessage" maxlength="50000" placeholder="Décrivez le changement attendu, le contexte et les critères de réussite."></textarea><small>Ajoutez les contraintes et les critères d’acceptation utiles.</small></div></div><div class="field"><label for="project">Projet GitLab</label><input id="project" required placeholder="groupe/mon-projet"><small>Chemin GitLab ou identifiant numérique</small></div><button type="submit" id="createButton">Lancer le workflow</button><p class="message" id="createMessage" aria-live="polite"></p></form></aside>
+        </div>
       </main>
     </div>
   </div>
   <script>
     const $ = selector => document.querySelector(selector);
-    const state = { key: localStorage.getItem('aidev-api-key') || '', selected: null, workflows: [], source: 'jira' };
+    const state = { key: localStorage.getItem('aidev-api-key') || '', workflows: [], source: 'jira', stream: null, retries: 0 };
     const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
     const headers = () => ({ 'X-Api-Key': state.key, 'Content-Type': 'application/json' });
     const formatDate = date => date ? new Intl.DateTimeFormat('fr-FR', {dateStyle:'medium', timeStyle:'short'}).format(new Date(date)) : '—';
     const statusClass = status => /FAILED/.test(status) ? 'failed' : /CANCELLED/.test(status) ? 'cancelled' : /DONE/.test(status) ? 'done' : /WAITING|NEEDS_CLARIFICATION/.test(status) ? 'waiting' : /CREATED/.test(status) ? 'idle' : '';
     const status = value => `<span class="status ${statusClass(value)}">${escape((value || '').replaceAll('_', ' '))}</span>`;
-    const duration = value => value == null ? '—' : value < 1000 ? `${value} ms` : `${(value / 1000).toFixed(value < 10000 ? 1 : 0)} s`;
-    const logOutput = value => `<pre class="log-output">${escape(value || 'Aucune sortie produite.')}</pre>`;
-    function renderTool(tool) { return `<details class="tool-log ${tool.successful === false ? 'failed' : ''}"><summary><span>${escape(tool.name)}</span><span>${tool.successful === false ? 'Échec · ' : ''}${duration(tool.durationMs)}</span></summary><p class="log-label">Arguments</p>${logOutput(tool.arguments)}<p class="log-label">Sortie sandbox</p>${logOutput(tool.output)}</details>`; }
-    function renderExecution(execution) { const response = execution.structuredResponse || execution.response || execution.error; return `<details class="execution-log ${execution.successful === false ? 'failed' : ''}"><summary><span class="execution-status"></span><span class="execution-summary"><strong>${escape(execution.agent)}</strong><span>${escape(execution.model || 'Modèle non renseigné')} · tentative ${execution.attempt}</span></span><span class="execution-duration">${duration(execution.durationMs)}</span></summary><div class="execution-body">${response ? `<p class="log-label">Réponse de l’IA</p>${logOutput(response)}` : '<p class="message">L’agent est encore en cours d’exécution.</p>'}${execution.tools?.length ? `<p class="log-label">Commandes et outils dans la sandbox</p>${execution.tools.map(renderTool).join('')}` : ''}</div></details>`; }
-    async function request(url, options = {}) { const response = await fetch(url, {...options, headers:{...headers(), ...(options.headers || {})}}); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || 'La requête a échoué.'); return body; }
     const workflowLabel = workflow => workflow.jiraTicket || workflow.requestId || 'Message direct';
-    function renderList() { const list = $('#workflowList'); const count = $('#workflowCount'); count.textContent = state.workflows.length ? `${state.workflows.length} workflow${state.workflows.length > 1 ? 's' : ''} affiché${state.workflows.length > 1 ? 's' : ''}` : 'Aucun workflow pour le moment'; if (!state.workflows.length) { list.innerHTML = '<div class="empty"><div><strong>Aucun workflow lancé</strong>Créez votre premier workflow depuis Jira ou avec un message direct.</div></div>'; return; } list.innerHTML = state.workflows.map(w => `<button class="workflow ${state.selected === w.id ? 'selected' : ''}" data-id="${escape(w.id)}"><span class="workflow-ticket">${escape(workflowLabel(w))}</span><span class="workflow-project">${escape(w.gitlabProject)}</span>${status(w.status)}<span class="workflow-date">${formatDate(w.updatedAt)}</span><span class="arrow" aria-hidden="true">›</span></button>`).join(''); list.querySelectorAll('[data-id]').forEach(button => button.addEventListener('click', () => selectWorkflow(button.dataset.id))); }
-    async function loadWorkflows() { $('#refresh').disabled = true; try { const page = await request('/api/workflows?size=50'); state.workflows = page.content || []; renderList(); if (state.selected) await selectWorkflow(state.selected, false); } catch (error) { $('#workflowList').innerHTML = `<div class="empty"><div><strong>Impossible de charger les workflows</strong>${escape(error.message)}</div></div>`; $('#workflowCount').textContent = 'Connexion requise'; throw error; } finally { $('#refresh').disabled = false; } }
-    async function selectWorkflow(id, scroll = true) { state.selected = id; renderList(); const detail = $('#detail'); detail.hidden = false; detail.innerHTML = '<div class="panel" style="padding:21px;color:var(--muted)">Chargement de l’historique…</div>'; if (scroll) detail.scrollIntoView({behavior:'smooth', block:'nearest'}); try { const data = await request(`/api/workflows/${id}`); const w = data.workflow; const steps = (data.steps || []).map(step => `<li class="${step.successful === false ? 'failed' : ''}"><span class="timeline-dot"></span><span><strong>${escape(step.to || 'Étape en cours')}</strong>${step.detail ? escape(step.detail) : step.error ? escape(step.error) : 'Transition enregistrée'}</span><time>${formatDate(step.startedAt)}</time></li>`).join('') || '<li><span class="timeline-dot"></span><span>Aucune transition enregistrée.</span></li>'; const agents = (data.agentExecutions || []).map(renderExecution).join('') || '<p class="message">Aucun agent exécuté.</p>'; const buildOutput = data.testReport?.rawOutputExcerpt; const sandbox = buildOutput ? `<article class="panel sandbox-log"><div class="detail-title"><div><h2>Sandbox · dernier build</h2><p>Sortie Maven capturée dans le conteneur isolé.</p></div></div>${logOutput(buildOutput)}</article>` : ''; const analysis = data.ticketAnalysis || {}; const questions = Array.isArray(analysis.ambiguities) ? analysis.ambiguities.filter(Boolean) : []; const analystFeedback = (analysis.objective || analysis.summaryForDeveloper || questions.length) ? `<section class="analyst-feedback" aria-label="Retour de l’analyste"><h3>Retour de l’IA</h3>${analysis.objective ? `<p><strong>Ce que l’IA a compris :</strong> ${escape(analysis.objective)}</p>` : ''}${analysis.summaryForDeveloper ? `<p>${escape(analysis.summaryForDeveloper)}</p>` : ''}${questions.length ? `<p><strong>Ce que vous devez préciser :</strong></p><ul>${questions.map(question => `<li>${escape(question)}</li>`).join('')}</ul>` : ''}</section>` : ''; const clarification = w.status === 'NEEDS_CLARIFICATION' ? `<article class="panel clarification"><div class="detail-title"><div><h2>Compléter la demande</h2><p>L’analyse reprend dès que ce contexte est enregistré.</p></div></div><p class="clarification-copy">${w.failureReason ? escape(w.failureReason) : 'Ajoutez les critères d’acceptation, le comportement attendu et les contraintes manquantes.'}</p>${analystFeedback}<form id="clarifyForm"><label class="field" for="clarification"><span>Votre réponse à l’IA</span><textarea id="clarification" required maxlength="50000" placeholder="Répondez aux points listés ci-dessus. Exemple : le nouveau titre doit être « All in one » sur toutes les pages publiques.">${escape(w.humanClarification || '')}</textarea><small>Cette précision est fournie à l’analyste avec la demande initiale.</small></label><div class="clarification-actions"><button type="submit" id="clarifyButton">Enregistrer et reprendre</button><p class="message" id="clarifyMessage" aria-live="polite"></p></div></form></article>` : w.humanClarification ? `<article class="panel clarification"><div class="detail-title"><div><h2>Clarification fournie</h2><p>Contexte utilisé pour la dernière analyse.</p></div></div>${analystFeedback}<p class="clarification-copy">${escape(w.humanClarification)}</p></article>` : ''; detail.innerHTML = `<div class="detail-grid"><article class="panel"><div class="detail-title"><div><h2>${escape(workflowLabel(w))}</h2><p>${escape(w.gitlabProject)}</p></div>${status(w.status)}</div><div class="facts"><div class="fact"><span>Branche</span><strong>${escape(w.branch || 'En attente')}</strong></div><div class="fact"><span>Branche cible</span><strong>${escape(w.baseBranch || '—')}</strong></div><div class="fact"><span>Merge request</span><strong>${w.mergeRequestUrl ? `<a href="${escape(w.mergeRequestUrl)}" target="_blank" rel="noopener">Ouvrir dans GitLab</a>` : 'Pas encore créée'}</strong></div><div class="fact"><span>Créé le</span><strong>${formatDate(w.createdAt)}</strong></div></div>${w.sourceMessage ? `<div class="fact" style="margin-top:14px"><span>Demande directe</span><strong>${escape(w.sourceMessage)}</strong></div>` : ''}${w.failureReason ? `<p class="message error">${escape(w.failureReason)}</p>` : ''}</article><article class="panel"><div class="detail-title"><div><h2>Journal des étapes</h2><p>Transitions enregistrées par l’orchestrateur</p></div></div><ol class="timeline">${steps}</ol></article>${clarification}${sandbox}<article class="panel"><div class="detail-title"><div><h2>Exécutions des agents</h2><p>Ouvrez une exécution pour voir la réponse de l’IA et ses outils.</p></div></div><div class="execution-list">${agents}</div></article></div>`; const clarifyForm = $('#clarifyForm'); if (clarifyForm) clarifyForm.addEventListener('submit', async event => { event.preventDefault(); const button = $('#clarifyButton'); const message = $('#clarifyMessage'); button.disabled = true; message.className = 'message'; message.textContent = 'Reprise de l’analyse…'; try { await request(`/api/workflows/${w.id}/clarification`, {method:'POST', body:JSON.stringify({clarification:$('#clarification').value.trim()})}); await loadWorkflows(); } catch (error) { message.className = 'message error'; message.textContent = error.message; button.disabled = false; } }); } catch (error) { detail.innerHTML = `<div class="panel" style="padding:21px;color:var(--danger)">Impossible de charger ce workflow : ${escape(error.message)}</div>`; } }
-    async function connect() { const key = $('#apiKey').value.trim(); if (!key) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = 'Saisissez la clé API de la plateforme.'; return; } state.key = key; $('#setupMessage').textContent = 'Vérification…'; try { await request('/api/workflows?size=1'); localStorage.setItem('aidev-api-key', key); $('#setup').remove(); $('#app').hidden = false; $('#keyState').classList.add('connected'); $('#keyState').textContent = 'Connecté'; await loadWorkflows(); } catch (error) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = error.message; } }
+    const detailUrl = workflow => `/workflow.html?id=${encodeURIComponent(workflow.id)}`;
+    async function request(url, options = {}) { const response = await fetch(url, {...options, headers:{...headers(), ...(options.headers || {})}}); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || 'La requête a échoué.'); return body; }
+
+    const rowContent = workflow => `<span class="workflow-ticket">${escape(workflowLabel(workflow))}</span><span class="workflow-project">${escape(workflow.gitlabProject)}</span>${status(workflow.status)}<span class="workflow-date">${formatDate(workflow.updatedAt)}</span><span class="arrow" aria-hidden="true">›</span>`;
+
+    function renderList() {
+      const list = $('#workflowList');
+      const count = state.workflows.length;
+      $('#workflowCount').textContent = count ? `${count} workflow${count > 1 ? 's' : ''} affiché${count > 1 ? 's' : ''}` : 'Aucun workflow pour le moment';
+      list.innerHTML = count
+        ? state.workflows.map(workflow => `<a class="workflow" href="${escape(detailUrl(workflow))}" data-id="${escape(workflow.id)}">${rowContent(workflow)}</a>`).join('')
+        : '<div class="empty"><div><strong>Aucun workflow lancé</strong>Créez votre premier workflow depuis Jira ou avec un message direct.</div></div>';
+    }
+
+    /** Repaints one row in place, so a live update never steals the focus or the scroll position. */
+    function applyWorkflow(workflow) {
+      const index = state.workflows.findIndex(candidate => candidate.id === workflow.id);
+      if (index < 0) { state.workflows.unshift(workflow); renderList(); }
+      else {
+        state.workflows[index] = workflow;
+        const row = $(`#workflowList [data-id="${workflow.id}"]`);
+        if (!row) { renderList(); return; }
+        row.innerHTML = rowContent(workflow);
+      }
+      const row = $(`#workflowList [data-id="${workflow.id}"]`);
+      if (row) { row.classList.remove('updated'); void row.offsetWidth; row.classList.add('updated'); }
+    }
+
+    async function loadWorkflows() {
+      $('#refresh').disabled = true;
+      try { const page = await request('/api/workflows?size=50'); state.workflows = page.content || []; renderList(); }
+      catch (error) { $('#workflowList').innerHTML = `<div class="empty"><div><strong>Impossible de charger les workflows</strong>${escape(error.message)}</div></div>`; $('#workflowCount').textContent = 'Connexion requise'; throw error; }
+      finally { $('#refresh').disabled = false; }
+    }
+
+    function setLive(mode, label) { const badge = $('#live'); badge.hidden = false; badge.className = `live${mode === 'on' ? ' streaming' : mode === 'retrying' ? ' retrying' : ''}`; $('#liveLabel').textContent = label; }
+
+    function handleEvent(raw) {
+      let name = 'message', data = '';
+      raw.split('\n').forEach(line => {
+        if (line.startsWith(':')) return;
+        if (line.startsWith('event:')) name = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += (data ? '\n' : '') + line.slice(5).replace(/^ /, '');
+      });
+      if (name === 'ready') { setLive('on', 'En direct'); return; }
+      if (name !== 'workflow' || !data) return;
+      try { applyWorkflow(JSON.parse(data)); } catch { /* a malformed frame must not stop the stream */ }
+    }
+
+    async function openStream() {
+      if (state.stream) state.stream.abort();
+      const controller = new AbortController();
+      state.stream = controller;
+      setLive(state.retries ? 'retrying' : 'connecting', state.retries ? 'Reconnexion…' : 'Connexion au flux…');
+      try {
+        const response = await fetch('/api/workflows/events', { headers: {'X-Api-Key': state.key, 'Accept': 'text/event-stream'}, cache: 'no-store', signal: controller.signal });
+        if (!response.ok || !response.body) throw new Error('Flux indisponible');
+        state.retries = 0;
+        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+        let buffer = '';
+        for (;;) {
+          const {value, done} = await reader.read();
+          if (done) break;
+          buffer = (buffer + value).replaceAll('\r\n', '\n');
+          let cut;
+          while ((cut = buffer.indexOf('\n\n')) !== -1) { handleEvent(buffer.slice(0, cut)); buffer = buffer.slice(cut + 2); }
+        }
+      } catch (error) { if (controller.signal.aborted) return; }
+      if (controller.signal.aborted) return;
+      // The stream ended: reconnect with backoff and re-read the list to catch up on what was missed.
+      state.retries += 1;
+      setLive('retrying', 'Reconnexion…');
+      setTimeout(() => { loadWorkflows().catch(() => {}); openStream(); }, Math.min(1000 * 2 ** (state.retries - 1), 15000));
+    }
+
+    async function connect() { const key = $('#apiKey').value.trim(); if (!key) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = 'Saisissez la clé API de la plateforme.'; return; } state.key = key; $('#setupMessage').textContent = 'Vérification…'; try { await request('/api/workflows?size=1'); localStorage.setItem('aidev-api-key', key); $('#setup').remove(); $('#app').hidden = false; $('#keyState').classList.add('connected'); $('#keyState').textContent = 'Connecté'; await loadWorkflows(); openStream(); } catch (error) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = error.message; } }
     function setSource(source) { state.source = source; const direct = source === 'message'; $('#jiraFields').hidden = direct; $('#messageFields').hidden = !direct; $('#ticket').required = !direct; $('#directMessage').required = direct; document.querySelectorAll('[data-source]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.source === source))); $('#createMessage').textContent = ''; }
-    $('#connect').addEventListener('click', connect); $('#apiKey').addEventListener('keydown', event => { if (event.key === 'Enter') connect(); }); $('#refresh').addEventListener('click', loadWorkflows); $('#disconnect').addEventListener('click', () => { localStorage.removeItem('aidev-api-key'); window.location.reload(); }); document.querySelectorAll('[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
-    $('#createForm').addEventListener('submit', async event => { event.preventDefault(); const message = $('#createMessage'); message.className = 'message'; message.textContent = 'Création…'; const button = $('#createButton'); button.disabled = true; try { const direct = state.source === 'message'; const workflow = await request(direct ? '/api/workflows/message' : '/api/workflows', {method:'POST', body:JSON.stringify(direct ? {message:$('#directMessage').value.trim(), gitlabProjectId:$('#project').value.trim()} : {jiraTicket:$('#ticket').value.trim().toUpperCase(), gitlabProjectId:$('#project').value.trim()})}); $('#ticket').value = ''; $('#directMessage').value = ''; $('#project').value = ''; message.textContent = `Workflow ${workflowLabel(workflow)} lancé.`; await loadWorkflows(); await selectWorkflow(workflow.id); } catch (error) { message.className = 'message error'; message.textContent = error.message; } finally { button.disabled = false; } });
+    $('#connect').addEventListener('click', connect); $('#apiKey').addEventListener('keydown', event => { if (event.key === 'Enter') connect(); }); $('#refresh').addEventListener('click', () => loadWorkflows().catch(() => {})); $('#disconnect').addEventListener('click', () => { localStorage.removeItem('aidev-api-key'); window.location.reload(); }); document.querySelectorAll('[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && state.key && !$('#app').hidden) loadWorkflows().catch(() => {}); });
+    $('#createForm').addEventListener('submit', async event => { event.preventDefault(); const message = $('#createMessage'); message.className = 'message'; message.textContent = 'Création…'; const button = $('#createButton'); button.disabled = true; try { const direct = state.source === 'message'; const workflow = await request(direct ? '/api/workflows/message' : '/api/workflows', {method:'POST', body:JSON.stringify(direct ? {message:$('#directMessage').value.trim(), gitlabProjectId:$('#project').value.trim()} : {jiraTicket:$('#ticket').value.trim().toUpperCase(), gitlabProjectId:$('#project').value.trim()})}); message.textContent = `Workflow ${workflowLabel(workflow)} lancé, ouverture du suivi…`; window.location.href = detailUrl(workflow); } catch (error) { message.className = 'message error'; message.textContent = error.message; button.disabled = false; } });
     if (state.key) { $('#apiKey').value = state.key; connect(); }
   </script>
 </body>

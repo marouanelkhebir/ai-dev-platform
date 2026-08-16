@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Workflow — AI Dev Platform</title>
+  <style>
+    :root { --page:#07101c; --surface:#0c1827; --surface-raised:#122237; --line:#243750; --text:#edf4fc; --muted:#9aabc0; --subtle:#74869d; --accent:#66e0ad; --accent-ink:#042518; --warning:#f4be67; --danger:#ff929a; --blue:#80bfff; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:320px; color:var(--text); background:var(--page); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button,input,textarea { font:inherit; }
+    button { border:0; border-radius:10px; padding:10px 14px; background:var(--accent); color:var(--accent-ink); font-weight:750; cursor:pointer; transition:transform .16s ease,background .16s ease; }
+    button:hover:not(:disabled) { transform:translateY(-1px); background:#85e8bf; }
+    button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible { outline:3px solid #80bfff80; outline-offset:2px; }
+    button:disabled { cursor:not-allowed; opacity:.5; }
+    button.secondary { background:#1a2a40; color:var(--text); }
+    button.secondary:hover:not(:disabled) { background:#273b55; }
+    input,textarea { width:100%; border:1px solid #344a66; border-radius:10px; padding:11px 12px; color:var(--text); background:#081524; }
+    textarea { min-height:126px; resize:vertical; line-height:1.45; }
+    input::placeholder,textarea::placeholder { color:var(--subtle); }
+    a { color:inherit; }
+    h1,h2,h3,p { margin:0; }
+    /* The heading carries a machine identifier, not a phrase: it stays readable without shouting. */
+    h1 { max-width:800px; font-size:clamp(21px,2.6vw,31px); line-height:1.15; letter-spacing:-.03em; overflow-wrap:anywhere; }
+    h2 { font-size:18px; letter-spacing:-.02em; }
+    h3 { font-size:14px; }
+    [hidden] { display:none!important; }
+
+    .shell { max-width:1440px; min-height:100vh; margin:auto; padding:0 30px 44px; }
+    .topbar { min-height:86px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:12px; text-decoration:none; }
+    .brand-mark { display:grid; width:30px; height:30px; place-items:center; border-radius:9px; background:var(--accent); color:#062519; font-weight:900; letter-spacing:-.08em; }
+    .brand strong { display:block; font-size:16px; letter-spacing:-.025em; }
+    .brand span span { color:var(--muted); font-size:12px; }
+    .top-actions { display:flex; align-items:center; gap:12px; }
+    .key-state { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
+    .key-state::before { width:8px; height:8px; border-radius:50%; background:#53667e; content:""; }
+    .key-state.connected::before { background:var(--accent); box-shadow:0 0 0 4px #66e0ad20; }
+    .layout { display:grid; grid-template-columns:245px minmax(0,1fr); gap:32px; padding-top:32px; }
+    .rail { display:flex; flex-direction:column; gap:8px; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; color:var(--muted); text-decoration:none; font-weight:650; }
+    .nav-item:hover { color:var(--text); background:#102037; }
+    .nav-item.active { color:var(--text); background:#13243a; }
+    .nav-icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .rail-note { margin-top:26px; padding:16px; border:1px solid var(--line); border-radius:14px; color:var(--muted); font-size:13px; }
+    .rail-note strong { display:block; color:var(--text); margin-bottom:4px; }
+    .content { min-width:0; }
+
+    .back { display:inline-flex; align-items:center; gap:7px; margin-bottom:14px; padding:5px 10px 5px 6px; border-radius:9px; color:var(--muted); font-size:13px; font-weight:650; text-decoration:none; }
+    .back:hover { color:var(--text); background:#13243a; }
+    .back svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+    .page-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:28px; margin-bottom:26px; }
+    .heading-side { display:flex; flex-direction:column; align-items:flex-end; gap:10px; min-width:max-content; }
+    .intro { margin-top:10px; color:var(--muted); }
+    .intro a { color:var(--blue); text-decoration:none; }
+    .intro a:hover { text-decoration:underline; }
+    .sep { margin:0 8px; color:#3a4f6b; }
+
+    .status { display:inline-flex; width:max-content; align-items:center; gap:7px; border-radius:999px; padding:5px 11px; color:#c6f5da; background:#164430; font-size:12px; font-weight:800; letter-spacing:.01em; transition:background .3s ease; }
+    .status::before { width:6px; height:6px; border-radius:50%; background:currentColor; content:""; }
+    .status.waiting { color:#ffe0a7; background:#47351a; }
+    .status.failed,.status.cancelled { color:#ffd0d4; background:#522630; }
+    .status.done { color:#cfe0ff; background:#243b60; }
+    .status.idle { color:#c5d1df; background:#26384c; }
+    .status.changed { animation:lift .9s cubic-bezier(.16,1,.3,1); }
+    @keyframes lift { 0% { box-shadow:0 0 0 0 currentColor; } 12% { box-shadow:0 0 0 5px currentColor; } 100% { box-shadow:0 0 0 0 transparent; } }
+
+    .live { display:inline-flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; font-weight:700; }
+    .live-dot { position:relative; width:7px; height:7px; border-radius:50%; background:currentColor; }
+    .live.streaming { color:var(--accent); }
+    .live.streaming .live-dot::after { position:absolute; inset:-4px; border:2px solid currentColor; border-radius:50%; content:""; animation:ping 2s cubic-bezier(.16,1,.3,1) infinite; }
+    .live.retrying { color:var(--warning); }
+    @keyframes ping { 0% { transform:scale(.55); opacity:.7; } 70%,100% { transform:scale(1.5); opacity:0; } }
+
+    .panel { border:1px solid var(--line); border-radius:15px; background:var(--surface); }
+    .panel + .panel,.stack > * + * { margin-top:20px; }
+    .stack { display:grid; }
+    .panel-head { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; padding:19px 20px; border-bottom:1px solid var(--line); }
+    .panel-head p { margin-top:3px; color:var(--muted); font-size:13px; }
+    .panel-metric { min-width:max-content; padding-top:2px; color:var(--muted); font-size:13px; }
+    .panel-metric strong { color:var(--text); font-variant-numeric:tabular-nums; }
+    .panel-body { padding:20px; }
+
+    .pipeline { display:flex; list-style:none; margin:0; padding:26px 20px 20px; overflow-x:auto; }
+    .stage { position:relative; flex:1 1 0; min-width:98px; display:grid; justify-items:center; gap:9px; padding:0 5px; text-align:center; }
+    .stage::before { position:absolute; top:13px; right:50%; left:-50%; height:2px; border-radius:2px; background:#22344c; content:""; }
+    .stage:first-child::before { display:none; }
+    .stage:not(.pending):not(.skipped)::before { background:#2f7d5f; }
+    .stage.failed::before { background:#7d3a44; }
+    .stage-node { position:relative; z-index:1; display:grid; width:28px; height:28px; place-items:center; border:2px solid #2c4160; border-radius:50%; background:var(--surface); color:var(--subtle); }
+    .stage-icon { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2.6; stroke-linecap:round; stroke-linejoin:round; }
+    .stage-dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+    .stage.done .stage-node { border-color:var(--accent); color:var(--accent); background:#0d2a1f; }
+    .stage.current .stage-node { border-color:var(--blue); color:var(--blue); background:#102539; }
+    .stage.current .stage-node::after { position:absolute; inset:-6px; border:2px solid var(--blue); border-radius:50%; content:""; animation:ping 1.9s cubic-bezier(.16,1,.3,1) infinite; }
+    .stage.failed .stage-node { border-color:var(--danger); color:var(--danger); background:#2b1620; }
+    .stage.blocked .stage-node { border-color:var(--warning); color:var(--warning); background:#2a2114; }
+    .stage.cancelled .stage-node { border-color:#4a5c73; color:var(--muted); }
+    .stage.skipped .stage-node { border-style:dashed; opacity:.5; }
+    .stage-label { display:flex; align-items:center; justify-content:center; gap:6px; color:var(--muted); font-size:12.5px; font-weight:700; line-height:1.25; }
+    .stage.done .stage-label,.stage.current .stage-label,.stage.failed .stage-label,.stage.blocked .stage-label { color:var(--text); }
+    .stage.skipped .stage-label { opacity:.5; }
+    .stage-repeat { padding:1px 5px; border-radius:5px; background:#1d3350; color:var(--blue); font-size:11px; font-style:normal; font-weight:800; }
+    .stage-meta { margin-top:-3px; color:var(--subtle); font-size:11.5px; font-variant-numeric:tabular-nums; }
+    .stage.current .stage-meta { color:var(--blue); }
+
+    .bars { display:grid; gap:11px; list-style:none; margin:0; padding:0; }
+    .bar { display:grid; grid-template-columns:minmax(96px,138px) minmax(0,1fr) 74px; align-items:center; gap:14px; }
+    .bar-label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; }
+    .bar-label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .bar-track { height:9px; border-radius:5px; background:#12233a; }
+    /* Scaled rather than resized: the running bar grows every second and must not relayout the panel. */
+    .bar-fill { display:block; width:100%; height:100%; border-radius:5px; background:var(--accent); transform:scaleX(var(--fill,0)); transform-origin:left center; transition:transform .4s cubic-bezier(.16,1,.3,1); }
+    .bar.failed .bar-fill { background:var(--danger); }
+    .bar.current .bar-fill { background:var(--blue); }
+    .bar-value { color:var(--text); font-size:12.5px; font-variant-numeric:tabular-nums; text-align:right; }
+    .bar.pending .bar-value { color:var(--subtle); }
+
+    .facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+    .fact { padding:13px; border-radius:10px; background:#0a1625; }
+    .fact span { display:block; color:var(--muted); font-size:12px; }
+    .fact strong { display:block; overflow-wrap:anywhere; margin-top:3px; font-size:14px; font-weight:750; }
+    .fact a { color:var(--blue); text-decoration:none; }
+    .fact a:hover { text-decoration:underline; }
+    .request { margin-top:14px; padding:15px 17px; border:1px solid #2a3d58; border-radius:12px; background:#0a1625; }
+    .request span { display:block; margin-bottom:5px; color:var(--muted); font-size:12px; }
+    .request p { max-width:78ch; color:var(--text); font-size:14px; }
+
+    .split { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr); gap:20px; align-items:start; }
+    .timeline { list-style:none; margin:0; padding:0; }
+    .timeline li { display:grid; grid-template-columns:16px minmax(0,1fr) auto; gap:10px; align-items:start; padding:0 0 16px; color:var(--muted); font-size:13px; }
+    .timeline li:last-child { padding-bottom:0; }
+    .timeline-dot { width:9px; height:9px; margin-top:5px; border:2px solid var(--accent); border-radius:50%; }
+    .timeline li.failed .timeline-dot { border-color:var(--danger); }
+    .timeline li.running .timeline-dot { border-color:var(--blue); background:var(--blue); }
+    .timeline strong { display:block; color:var(--text); font-size:14px; }
+    .timeline time { color:var(--subtle); font-size:12px; white-space:nowrap; }
+
+    .execution-list { display:grid; gap:10px; }
+    .execution-log { border:1px solid #263b55; border-radius:12px; background:#0a1625; }
+    .execution-log[open] { background:#0c1b2d; }
+    .execution-log summary { display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:10px; align-items:center; padding:13px; cursor:pointer; list-style:none; }
+    .execution-log summary::-webkit-details-marker { display:none; }
+    .execution-log summary:focus-visible { border-radius:10px; }
+    .execution-status { width:8px; height:8px; border:2px solid var(--accent); border-radius:50%; }
+    .execution-log.failed .execution-status { border-color:var(--danger); }
+    .execution-log.running .execution-status { border-color:var(--blue); background:var(--blue); }
+    .execution-log.running .execution-duration { color:var(--blue); }
+    .execution-summary strong { display:block; font-size:14px; }
+    .execution-summary span { color:var(--muted); font-size:12px; }
+    .execution-duration { color:var(--muted); font-size:12px; white-space:nowrap; }
+    .execution-body { display:grid; gap:12px; padding:0 13px 13px; border-top:1px solid #263b55; }
+    .log-label { margin:12px 0 -7px; color:var(--muted); font-size:12px; font-weight:750; }
+    .log-output { max-height:360px; margin:0; overflow:auto; padding:12px; border:1px solid #243a54; border-radius:9px; background:#07111e; color:#dce8f4; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .tool-log { border:1px solid #243a54; border-radius:9px; }
+    .tool-log summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px; cursor:pointer; font-size:13px; font-weight:700; }
+    .tool-log summary span { color:var(--muted); font-size:12px; font-weight:400; }
+    .tool-log[open] summary { border-bottom:1px solid #243a54; }
+    .tool-log .log-output { margin:10px; }
+    .sandbox .log-output { max-height:440px; }
+
+    .clarification { border-color:#73552a; }
+    .clarification-copy { max-width:72ch; color:var(--muted); font-size:14px; }
+    .clarification textarea { margin-top:16px; }
+    .clarification label span { display:block; margin-bottom:6px; font-size:13px; font-weight:750; }
+    .clarification small { display:block; margin-top:5px; color:var(--muted); font-size:12px; }
+    .clarification-actions { display:flex; align-items:center; gap:14px; margin-top:14px; }
+    .analyst-feedback { max-width:72ch; margin:16px 0 4px; padding:16px; border:1px solid #394c66; border-radius:12px; background:#0a1625; }
+    .analyst-feedback h3 { margin-bottom:5px; }
+    .analyst-feedback p { color:var(--muted); font-size:14px; }
+    .analyst-feedback strong { color:var(--text); }
+    .analyst-feedback ul { margin:10px 0 0; padding-left:20px; color:#dbe7f3; }
+    .analyst-feedback li + li { margin-top:7px; }
+
+    .message { min-height:20px; color:var(--muted); font-size:13px; }
+    .message.error { color:var(--danger); }
+    .empty { padding:8px 0; color:var(--muted); font-size:13px; }
+    .placeholder { padding:21px; color:var(--muted); }
+
+    .setup { display:grid; min-height:100vh; place-items:center; padding:24px; }
+    .setup-card { width:min(500px,100%); padding:32px; border:1px solid var(--line); border-radius:18px; background:var(--surface); }
+    .setup-card .brand { margin-bottom:34px; }
+    .setup-card h1 { font-size:31px; }
+    .setup-card > p { margin-top:12px; color:var(--muted); }
+    .setup-card label { display:block; margin:25px 0 7px; font-size:13px; font-weight:750; }
+    .setup-card button { width:100%; margin-top:14px; }
+    .setup-card .help { margin-top:24px; padding-top:18px; border-top:1px solid var(--line); font-size:13px; }
+    .setup-card .help code { color:var(--text); }
+
+    @media (max-width:1080px) { .split { grid-template-columns:1fr; } }
+    @media (max-width:980px) { .layout { grid-template-columns:1fr; } .rail { flex-direction:row; } .rail-note { display:none; } .facts { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width:680px) {
+      .shell { padding:0 17px 30px; }
+      .topbar { min-height:72px; }
+      .key-state { display:none; }
+      .layout { gap:19px; padding-top:20px; }
+      .page-heading { flex-direction:column; align-items:flex-start; gap:16px; margin-bottom:20px; }
+      .heading-side { flex-direction:row; align-items:center; gap:14px; }
+      .facts { grid-template-columns:1fr; }
+      .bar { grid-template-columns:minmax(0,1fr) 70px; gap:5px 12px; }
+      .bar-label { grid-column:1; }
+      .bar-track { grid-column:1 / -1; grid-row:2; }
+      .pipeline { flex-direction:column; padding:18px 18px 14px; overflow:visible; }
+      .stage { flex:none; min-width:0; min-height:52px; grid-template-columns:28px minmax(0,1fr) max-content; align-items:center; justify-items:start; gap:4px 13px; padding:0; text-align:left; }
+      .stage::before { top:-25px; right:auto; left:13px; width:2px; height:51px; }
+      .stage-meta { grid-column:3; grid-row:1; margin:0; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      * { animation-duration:.001ms!important; animation-iteration-count:1!important; transition-duration:.001ms!important; }
+      .stage.current .stage-node::after,.live.streaming .live-dot::after { opacity:.4; }
+    }
+  </style>
+</head>
+<body>
+  <section class="setup" id="setup">
+    <div class="setup-card">
+      <a class="brand" href="/"><span class="brand-mark">AI</span><span><strong>AI Dev Platform</strong><span>Console de pilotage</span></span></a>
+      <h1>Ouvrir la console</h1>
+      <p>Utilisez la clé API de la plateforme pour suivre ce workflow. Elle reste uniquement dans ce navigateur.</p>
+      <label for="apiKey">Clé API plateforme</label><input id="apiKey" type="password" autocomplete="current-password" placeholder="Collez votre clé API">
+      <button id="connect">Accéder à la console</button>
+      <p class="message" id="setupMessage" aria-live="polite"></p>
+      <p class="help">Lors du premier démarrage, une clé est écrite dans les logs du serveur. Vous pouvez aussi définir <code>PLATFORM_API_KEY</code> dans votre environnement.</p>
+    </div>
+  </section>
+
+  <div class="shell" id="app" hidden>
+    <header class="topbar">
+      <a class="brand" href="/"><span class="brand-mark">AI</span><span><strong>AI Dev Platform</strong><span>Console de pilotage</span></span></a>
+      <div class="top-actions"><span class="key-state" id="keyState">Clé API non vérifiée</span><button class="secondary" id="disconnect">Déconnecter</button></div>
+    </header>
+    <div class="layout">
+      <nav class="rail" aria-label="Navigation principale">
+        <a class="nav-item active" href="/" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/></svg>Workflows</a>
+        <a class="nav-item" href="/settings.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="m19.4 15 .1 1.4-1.7 2.1-1.4-.5a7.3 7.3 0 0 1-1.5.9l-.3 1.4-2.7.4-.7-1.3a7.8 7.8 0 0 1-1.7-.4l-1.1.9-2.4-1.3.2-1.5a7 7 0 0 1-1.1-1.3l-1.4-.1-.7-2.6 1.1-.9a7 7 0 0 1 .2-1.7l-1-1.1L6 7.1l1.4.2a7 7 0 0 1 1.3-1l.1-1.5 2.6-.7.9 1.1a7 7 0 0 1 1.7.2l1.1-1 2.3 1.3-.2 1.4a7 7 0 0 1 1.1 1.4l1.4.1.7 2.6-1.1.9a7 7 0 0 1-.2 1.8Z"/></svg>Paramètres</a>
+        <aside class="rail-note"><strong>Contrôle humain</strong>La fusion reste une action manuelle dans GitLab, même après approbation.</aside>
+      </nav>
+
+      <main class="content">
+        <a class="back" href="/"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Tous les workflows</a>
+
+        <div class="page-heading">
+          <div>
+            <h1 id="title">Chargement…</h1>
+            <p class="intro" id="subtitle"></p>
+          </div>
+          <div class="heading-side">
+            <span class="status idle" id="statusPill" aria-live="polite">—</span>
+            <span class="live" id="live" hidden><span class="live-dot"></span><span id="liveLabel">Connexion au flux…</span></span>
+          </div>
+        </div>
+
+        <div class="panel placeholder" id="loading">Chargement du workflow…</div>
+        <div class="panel placeholder" id="failure" hidden></div>
+
+        <div class="stack" id="body" hidden>
+          <section class="panel" id="pipelinePanel">
+            <div class="panel-head">
+              <div><h2>Progression</h2><p>Les états traversés par l’orchestrateur, dans l’ordre.</p></div>
+              <span class="panel-metric" id="pipelineMetric"></span>
+            </div>
+            <ol class="pipeline" id="pipeline"></ol>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head"><div><h2>Identité du workflow</h2><p>Ce que l’orchestrateur a écrit sur ce ticket.</p></div></div>
+            <div class="panel-body"><div class="facts" id="facts"></div><div class="request" id="request" hidden></div><p class="message error" id="failureReason" hidden></p></div>
+          </section>
+
+          <section class="panel clarification" id="clarificationPanel" hidden></section>
+
+          <div class="split">
+            <section class="panel">
+              <div class="panel-head"><div><h2>Journal des étapes</h2><p>Transitions enregistrées par l’orchestrateur.</p></div></div>
+              <div class="panel-body"><ol class="timeline" id="timeline"></ol></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div><h2>Durée des étapes</h2><p>Temps passé dans chaque état, tentatives cumulées.</p></div>
+                <span class="panel-metric" id="chartMetric"></span>
+              </div>
+              <div class="panel-body"><ul class="bars" id="chart"></ul></div>
+            </section>
+          </div>
+
+          <section class="panel sandbox" id="sandboxPanel" hidden>
+            <div class="panel-head"><div><h2>Sandbox · dernier build</h2><p>Sortie du build capturée dans le conteneur isolé.</p></div></div>
+            <div class="panel-body" id="sandbox"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head"><div><h2>Exécutions des agents</h2><p>Ouvrez une exécution pour voir la réponse de l’IA et ses outils.</p></div></div>
+            <div class="panel-body"><div class="execution-list" id="executions"></div></div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const $ = selector => document.querySelector(selector);
+    const params = new URLSearchParams(window.location.search);
+
+    const state = {
+      key: localStorage.getItem('aidev-api-key') || '',
+      id: params.get('id') || '',
+      detail: null,
+      stream: null,
+      retries: 0,
+      refreshTimer: null,
+      lastStatus: null
+    };
+
+    /**
+     * The happy path of the state machine, in order. The review states only appear on a workflow
+     * that actually visited them, so the rail never promises a phase this version does not run.
+     */
+    const STAGES = [
+      ['CREATED', 'Créé', true],
+      ['ANALYZING_JIRA', 'Analyse', true],
+      ['PLANNING', 'Plan technique', true],
+      ['DEVELOPING', 'Développement', true],
+      ['RUNNING_LOCAL_TESTS', 'Tests', true],
+      ['PUSHING', 'Push', true],
+      ['CREATING_MERGE_REQUEST', 'Merge request', true],
+      ['CODE_REVIEW', 'Revue de code', false],
+      ['SECURITY_REVIEW', 'Revue sécurité', false],
+      ['ACCEPTANCE', 'Recette', false],
+      ['WAITING_HUMAN_APPROVAL', 'Validation humaine', false],
+      ['DONE', 'Terminé', true]
+    ];
+    /** Terminal states that stop the workflow outside the sequence above. */
+    const OFF_PATH = { NEEDS_CLARIFICATION: ['Clarification requise', 'blocked'], FAILED: ['Échec', 'failed'], CANCELLED: ['Annulé', 'cancelled'] };
+    const ICON = {
+      check: '<svg class="stage-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.6 4.5L19 7"/></svg>',
+      cross: '<svg class="stage-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 7.5 16.5 16.5M16.5 7.5 7.5 16.5"/></svg>',
+      alert: '<svg class="stage-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5v6.5"/><path d="M12 17.1v.2"/></svg>',
+      dot: '<span class="stage-dot"></span>'
+    };
+
+    const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+    const headers = () => ({ 'X-Api-Key': state.key, 'Content-Type': 'application/json' });
+    const formatDate = date => date ? new Intl.DateTimeFormat('fr-FR', {dateStyle:'medium', timeStyle:'short'}).format(new Date(date)) : '—';
+    const statusClass = value => /FAILED/.test(value) ? 'failed' : /CANCELLED/.test(value) ? 'cancelled' : /DONE/.test(value) ? 'done'
+      : /WAITING|NEEDS_CLARIFICATION/.test(value) ? 'waiting' : /CREATED/.test(value) ? 'idle' : '';
+    const logOutput = value => `<pre class="log-output">${escape(value || 'Aucune sortie produite.')}</pre>`;
+    const workflowLabel = workflow => workflow.jiraTicket || workflow.requestId || 'Message direct';
+    const isTerminal = () => ['DONE', 'FAILED', 'CANCELLED', 'NEEDS_CLARIFICATION'].includes(state.detail?.workflow?.status);
+
+    function formatDuration(ms) {
+      if (ms == null) return '—';
+      if (ms < 1000) return `${Math.round(ms)} ms`;
+      const seconds = ms / 1000;
+      if (seconds < 59.5) return `${seconds.toFixed(seconds < 10 ? 1 : 0).replace('.', ',')} s`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes} min ${String(Math.round(seconds % 60)).padStart(2, '0')} s`;
+      return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
+    }
+
+    async function request(url, options = {}) {
+      const response = await fetch(url, {...options, headers:{...headers(), ...(options.headers || {})}});
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || 'La requête a échoué.');
+      return body;
+    }
+
+    // ----------------------------------------------------------------- model
+
+    /** Folds the recorded steps into what the pipeline and the chart both need. */
+    function summarise() {
+      const steps = state.detail?.steps || [];
+      const arrivals = new Map();
+      const spent = new Map();
+      const failed = new Set();
+      let running = null;
+
+      steps.forEach(step => {
+        if (step.to) arrivals.set(step.to, (arrivals.get(step.to) || 0) + 1);
+        else running = step;
+        if (step.durationMs != null) spent.set(step.from, (spent.get(step.from) || 0) + step.durationMs);
+        if (step.successful === false) failed.add(step.from);
+      });
+      // The workflow row exists, so its first state was reached without a recorded transition.
+      arrivals.set('CREATED', arrivals.get('CREATED') || 1);
+
+      const elapsed = running ? Math.max(0, Date.now() - new Date(running.startedAt).getTime()) : 0;
+      const total = [...spent.values()].reduce((sum, value) => sum + value, 0) + elapsed;
+      return { arrivals, spent, failed, running, elapsed, total };
+    }
+
+    /** The stages to draw, with the state each one is in right now. */
+    function stagesOf(summary) {
+      const status = state.detail.workflow.status;
+      const stopped = isTerminal();
+      const stages = STAGES
+        .filter(([key,, always]) => always || summary.arrivals.has(key) || key === status)
+        .map(([key, label]) => {
+          const attempts = summary.arrivals.get(key) || 0;
+          let kind = 'pending';
+          if (summary.failed.has(key)) kind = 'failed';
+          else if (key === status) kind = status === 'DONE' ? 'done' : 'current';
+          else if (attempts) kind = 'done';
+          else if (stopped) kind = 'skipped';
+
+          const inProgress = summary.running?.from === key;
+          const time = (summary.spent.get(key) || 0) + (inProgress ? summary.elapsed : 0);
+          return { key, label, kind, attempts, inProgress, time };
+        });
+
+      const offPath = OFF_PATH[status];
+      if (offPath) stages.push({ key: status, label: offPath[0], kind: offPath[1], attempts: 0, inProgress: false, time: 0 });
+      return stages;
+    }
+
+    // --------------------------------------------------------------- render
+
+    function render() {
+      const workflow = state.detail.workflow;
+      $('#loading').hidden = true;
+      $('#failure').hidden = true;
+      $('#body').hidden = false;
+      document.title = `${workflowLabel(workflow)} — AI Dev Platform`;
+
+      renderHeader();
+      renderProgress();
+      renderFacts();
+      renderTimeline();
+      renderClarification();
+      renderSandbox();
+      renderExecutions();
+    }
+
+    function renderHeader() {
+      const workflow = state.detail.workflow;
+      $('#title').textContent = workflowLabel(workflow);
+      $('#subtitle').innerHTML = `${escape(workflow.gitlabProject)}<span class="sep">·</span>créé le ${formatDate(workflow.createdAt)}`;
+
+      const pill = $('#statusPill');
+      pill.className = `status ${statusClass(workflow.status)}`;
+      pill.textContent = (workflow.status || '').replaceAll('_', ' ');
+      if (state.lastStatus && state.lastStatus !== workflow.status) {
+        pill.classList.remove('changed');
+        void pill.offsetWidth;
+        pill.classList.add('changed');
+      }
+      state.lastStatus = workflow.status;
+    }
+
+    /** The pipeline rail and the duration chart read the same fold, so they can never disagree. */
+    function renderProgress() {
+      const summary = summarise();
+      const stages = stagesOf(summary);
+
+      $('#pipeline').innerHTML = stages.map(stage => {
+        const icon = stage.kind === 'done' ? ICON.check
+          : stage.kind === 'failed' ? ICON.cross
+          : stage.kind === 'blocked' ? ICON.alert
+          : stage.kind === 'current' || stage.kind === 'cancelled' ? ICON.dot
+          : '';
+        const meta = stage.inProgress ? formatDuration(stage.time)
+          : stage.time ? formatDuration(stage.time)
+          : stage.kind === 'skipped' ? 'Non parcourue'
+          : '';
+        return `<li class="stage ${stage.kind}"${stage.inProgress ? ' data-live-stage="true"' : ''}>
+          <span class="stage-node">${icon}</span>
+          <span class="stage-label">${escape(stage.label)}${stage.attempts > 1 ? `<em class="stage-repeat">×${stage.attempts}</em>` : ''}</span>
+          <span class="stage-meta">${escape(meta)}</span>
+        </li>`;
+      }).join('');
+
+      const done = stages.filter(stage => stage.kind === 'done').length;
+      $('#pipelineMetric').innerHTML = `${done}/${stages.length} étapes<span class="sep">·</span><strong data-live-total>${formatDuration(summary.total)}</strong>`;
+
+      renderChart(summary, stages);
+    }
+
+    function renderChart(summary, stages) {
+      const rows = stages.filter(stage => stage.time > 0 || stage.inProgress);
+      const chart = $('#chart');
+      if (!rows.length) {
+        chart.innerHTML = '<li class="empty">Aucune étape mesurée pour l’instant. Les durées apparaissent dès la première transition terminée.</li>';
+        $('#chartMetric').textContent = '';
+        return;
+      }
+      const longest = Math.max(...rows.map(row => row.time), 1);
+      chart.innerHTML = rows.map(row => `<li class="bar ${row.kind}">
+        <span class="bar-label"><span>${escape(row.label)}</span>${row.attempts > 1 ? `<em class="stage-repeat">×${row.attempts}</em>` : ''}</span>
+        <span class="bar-track"><span class="bar-fill"${row.inProgress ? ' data-live-bar="true"' : ''} style="--fill:${Math.max(0.012, row.time / longest).toFixed(3)}"></span></span>
+        <span class="bar-value"${row.inProgress ? ' data-live-bar-value="true"' : ''}>${escape(formatDuration(row.time))}</span>
+      </li>`).join('');
+      $('#chartMetric').innerHTML = `Total<span class="sep">·</span><strong data-live-total>${formatDuration(summary.total)}</strong>`;
+      chart.dataset.longest = String(longest);
+    }
+
+    function renderFacts() {
+      const workflow = state.detail.workflow;
+      const facts = [
+        ['Branche', escape(workflow.branch || 'En attente')],
+        ['Branche cible', escape(workflow.baseBranch || '—')],
+        ['Merge request', workflow.mergeRequestUrl
+          ? `<a href="${escape(workflow.mergeRequestUrl)}" target="_blank" rel="noopener">Ouvrir !${escape(workflow.mergeRequestIid)}</a>`
+          : 'Pas encore créée'],
+        ['Profil de build', escape(workflow.buildProfile || 'Non détecté')],
+        ['Tentatives de développement', escape(workflow.developmentAttempts)],
+        ['Rounds de revue', escape(workflow.reviewAttempts)]
+      ];
+      $('#facts').innerHTML = facts.map(([label, value]) => `<div class="fact"><span>${label}</span><strong>${value}</strong></div>`).join('');
+
+      // The request is prose, not a fact: it gets its own width instead of a ragged grid cell.
+      const request = $('#request');
+      request.hidden = !workflow.sourceMessage;
+      if (workflow.sourceMessage) request.innerHTML = `<span>Demande directe</span><p>${escape(workflow.sourceMessage)}</p>`;
+
+      const reason = $('#failureReason');
+      reason.hidden = !workflow.failureReason;
+      reason.textContent = workflow.failureReason || '';
+    }
+
+    function renderTimeline() {
+      const steps = state.detail.steps || [];
+      $('#timeline').innerHTML = steps.length
+        ? [...steps].reverse().map(step => {
+            const kind = step.successful === false ? 'failed' : step.to ? '' : 'running';
+            const label = step.to ? step.to.replaceAll('_', ' ') : `${step.from.replaceAll('_', ' ')} · en cours`;
+            const detail = step.detail || step.error || (step.to ? 'Transition enregistrée' : 'Étape démarrée');
+            return `<li class="${kind}"><span class="timeline-dot"></span><span><strong>${escape(label)}</strong>${escape(detail)}</span><time>${formatDate(step.startedAt)}</time></li>`;
+          }).join('')
+        : '<li><span class="timeline-dot"></span><span>Aucune transition enregistrée.</span></li>';
+    }
+
+    function analystFeedback() {
+      const analysis = state.detail.ticketAnalysis || {};
+      const questions = Array.isArray(analysis.ambiguities) ? analysis.ambiguities.filter(Boolean) : [];
+      if (!analysis.objective && !analysis.summaryForDeveloper && !questions.length) return '';
+      return `<section class="analyst-feedback" aria-label="Retour de l’analyste"><h3>Retour de l’IA</h3>
+        ${analysis.objective ? `<p><strong>Ce que l’IA a compris :</strong> ${escape(analysis.objective)}</p>` : ''}
+        ${analysis.summaryForDeveloper ? `<p>${escape(analysis.summaryForDeveloper)}</p>` : ''}
+        ${questions.length ? `<p><strong>Ce que vous devez préciser :</strong></p><ul>${questions.map(question => `<li>${escape(question)}</li>`).join('')}</ul>` : ''}</section>`;
+    }
+
+    function renderClarification() {
+      const workflow = state.detail.workflow;
+      const panel = $('#clarificationPanel');
+      const blocked = workflow.status === 'NEEDS_CLARIFICATION';
+      if (!blocked && !workflow.humanClarification) { panel.hidden = true; panel.innerHTML = ''; return; }
+
+      // Never rebuild the form under the operator's cursor: they may be halfway through an answer.
+      const signature = `${workflow.status}|${workflow.humanClarification || ''}|${workflow.failureReason || ''}`;
+      if (panel.dataset.signature === signature || panel.contains(document.activeElement)) { panel.hidden = false; return; }
+      panel.dataset.signature = signature;
+      panel.hidden = false;
+
+      panel.innerHTML = blocked
+        ? `<div class="panel-head"><div><h2>Compléter la demande</h2><p>L’analyse reprend dès que ce contexte est enregistré.</p></div></div>
+           <div class="panel-body">
+             <p class="clarification-copy">${escape(workflow.failureReason || 'Ajoutez les critères d’acceptation, le comportement attendu et les contraintes manquantes.')}</p>
+             ${analystFeedback()}
+             <form id="clarifyForm"><label for="clarification"><span>Votre réponse à l’IA</span>
+               <textarea id="clarification" required maxlength="50000" placeholder="Répondez aux points listés ci-dessus. Exemple : le nouveau titre doit être « All in one » sur toutes les pages publiques.">${escape(workflow.humanClarification || '')}</textarea>
+               <small>Cette précision est fournie à l’analyste avec la demande initiale.</small></label>
+               <div class="clarification-actions"><button type="submit" id="clarifyButton">Enregistrer et reprendre</button><p class="message" id="clarifyMessage" aria-live="polite"></p></div>
+             </form>
+           </div>`
+        : `<div class="panel-head"><div><h2>Clarification fournie</h2><p>Contexte utilisé pour la dernière analyse.</p></div></div>
+           <div class="panel-body">${analystFeedback()}<p class="clarification-copy">${escape(workflow.humanClarification)}</p></div>`;
+
+      const form = $('#clarifyForm');
+      if (form) form.addEventListener('submit', submitClarification);
+    }
+
+    async function submitClarification(event) {
+      event.preventDefault();
+      const button = $('#clarifyButton');
+      const message = $('#clarifyMessage');
+      button.disabled = true;
+      message.className = 'message';
+      message.textContent = 'Reprise de l’analyse…';
+      try {
+        await request(`/api/workflows/${encodeURIComponent(state.id)}/clarification`, {
+          method: 'POST',
+          body: JSON.stringify({clarification: $('#clarification').value.trim()})
+        });
+        $('#clarificationPanel').dataset.signature = '';
+        await refresh();
+        openStream();
+      } catch (error) {
+        message.className = 'message error';
+        message.textContent = error.message;
+        button.disabled = false;
+      }
+    }
+
+    function renderSandbox() {
+      const output = state.detail.testReport?.rawOutputExcerpt;
+      $('#sandboxPanel').hidden = !output;
+      if (output) $('#sandbox').innerHTML = logOutput(output);
+    }
+
+    const openLogs = new Set();
+    document.addEventListener('toggle', event => {
+      const key = event.target instanceof HTMLElement && event.target.dataset.logKey;
+      if (!key) return;
+      if (event.target.open) openLogs.add(key); else openLogs.delete(key);
+    }, true);
+
+    function renderTool(tool, parentKey, index) {
+      const key = `${parentKey}/tool/${index}`;
+      return `<details class="tool-log" data-log-key="${escape(key)}" ${openLogs.has(key) ? 'open' : ''}>
+        <summary><span>${escape(tool.name)}</span><span>${tool.successful === false ? 'Échec · ' : ''}${escape(formatDuration(tool.durationMs))}</span></summary>
+        <p class="log-label">Arguments</p>${logOutput(tool.arguments)}
+        <p class="log-label">Sortie sandbox</p>${logOutput(tool.output)}</details>`;
+    }
+
+    function renderExecution(execution, index) {
+      const key = `${execution.agent}/${execution.attempt}/${execution.startedAt || index}`;
+      const response = execution.structuredResponse || execution.response || execution.error;
+      const running = execution.successful == null && execution.durationMs == null;
+      return `<details class="execution-log ${execution.successful === false ? 'failed' : running ? 'running' : ''}" data-log-key="${escape(key)}" ${openLogs.has(key) ? 'open' : ''}>
+        <summary><span class="execution-status"></span><span class="execution-summary"><strong>${escape(execution.agent)}</strong><span>${escape(execution.model || 'Modèle non renseigné')} · tentative ${escape(execution.attempt)}</span></span><span class="execution-duration">${running ? 'En cours' : escape(formatDuration(execution.durationMs))}</span></summary>
+        <div class="execution-body">
+          ${response ? `<p class="log-label">Réponse de l’IA</p>${logOutput(response)}` : '<p class="message">L’agent est encore en cours d’exécution.</p>'}
+          ${execution.tools?.length ? `<p class="log-label">Commandes et outils dans la sandbox</p>${execution.tools.map((tool, position) => renderTool(tool, key, position)).join('')}` : ''}
+        </div></details>`;
+    }
+
+    function renderExecutions() {
+      const executions = state.detail.agentExecutions || [];
+      $('#executions').innerHTML = executions.length
+        ? executions.map(renderExecution).join('')
+        : '<p class="empty">Aucun agent exécuté pour l’instant.</p>';
+    }
+
+    // ------------------------------------------------------------ live wiring
+
+    /** Retimes only what is measured against the clock, without rebuilding the page. */
+    function tick() {
+      if (!state.detail || isTerminal()) return;
+      const summary = summarise();
+      if (!summary.running) return;
+      document.querySelectorAll('[data-live-total]').forEach(node => { node.textContent = formatDuration(summary.total); });
+
+      const stage = document.querySelector('[data-live-stage] .stage-meta');
+      const stageTime = (summary.spent.get(summary.running.from) || 0) + summary.elapsed;
+      if (stage) stage.textContent = formatDuration(stageTime);
+
+      const value = document.querySelector('[data-live-bar-value]');
+      if (value) value.textContent = formatDuration(stageTime);
+      const fill = document.querySelector('[data-live-bar]');
+      const longest = Number($('#chart').dataset.longest || 0);
+      if (fill && stageTime > longest) renderProgress();
+    }
+
+    function setLive(mode, label) {
+      const badge = $('#live');
+      badge.hidden = mode === 'off';
+      badge.className = `live${mode === 'on' ? ' streaming' : mode === 'retrying' ? ' retrying' : ''}`;
+      $('#liveLabel').textContent = label;
+    }
+
+    function applyStep(step) {
+      const steps = state.detail.steps || (state.detail.steps = []);
+      const existing = steps.findIndex(candidate => candidate.sequence === step.sequence);
+      if (existing >= 0) steps[existing] = step; else steps.push(step);
+      steps.sort((left, right) => left.sequence - right.sequence);
+      renderProgress();
+      renderTimeline();
+    }
+
+    function handleEvent(raw) {
+      let name = 'message';
+      let data = '';
+      raw.split('\n').forEach(line => {
+        if (line.startsWith(':')) return;
+        if (line.startsWith('event:')) name = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += (data ? '\n' : '') + line.slice(5).replace(/^ /, '');
+      });
+      if (name === 'ready') { setLive('on', 'En direct'); return; }
+      if (!data) return;
+
+      let payload;
+      try { payload = JSON.parse(data); } catch { return; }
+      if (name === 'workflow') { state.detail.workflow = payload; renderHeader(); renderProgress(); renderFacts(); renderClarification(); }
+      else if (name === 'step') applyStep(payload);
+      else return;
+      // The pushed payload is instant but partial: the agent logs still come from the audit view.
+      scheduleRefresh();
+      if (isTerminal()) closeStream('off', '');
+    }
+
+    async function openStream() {
+      if (isTerminal()) { closeStream('off', ''); return; }
+      if (state.stream) state.stream.abort();
+      const controller = new AbortController();
+      state.stream = controller;
+      setLive(state.retries ? 'retrying' : 'connecting', state.retries ? 'Reconnexion…' : 'Connexion au flux…');
+
+      try {
+        const response = await fetch(`/api/workflows/${encodeURIComponent(state.id)}/events`, {
+          headers: {'X-Api-Key': state.key, 'Accept': 'text/event-stream'},
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        if (!response.ok || !response.body) throw new Error('Flux indisponible');
+        state.retries = 0;
+
+        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+        let buffer = '';
+        for (;;) {
+          const {value, done} = await reader.read();
+          if (done) break;
+          buffer = (buffer + value).replaceAll('\r\n', '\n');
+          let cut;
+          while ((cut = buffer.indexOf('\n\n')) !== -1) {
+            handleEvent(buffer.slice(0, cut));
+            buffer = buffer.slice(cut + 2);
+          }
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+      }
+      if (controller.signal.aborted || isTerminal()) return;
+
+      // The stream ended: reconnect with backoff, and catch up on whatever was missed meanwhile.
+      state.retries += 1;
+      setLive('retrying', 'Reconnexion…');
+      const delay = Math.min(1000 * 2 ** (state.retries - 1), 15000);
+      setTimeout(() => { refresh().catch(() => {}); openStream(); }, delay);
+    }
+
+    function closeStream(mode, label) {
+      if (state.stream) { state.stream.abort(); state.stream = null; }
+      setLive(mode, label);
+    }
+
+    function scheduleRefresh() {
+      clearTimeout(state.refreshTimer);
+      state.refreshTimer = setTimeout(() => refresh().catch(() => {}), 300);
+    }
+
+    async function refresh() {
+      state.detail = await request(`/api/workflows/${encodeURIComponent(state.id)}`);
+      render();
+      if (isTerminal()) closeStream('off', '');
+    }
+
+    // --------------------------------------------------------------- startup
+
+    async function load() {
+      try {
+        await refresh();
+        localStorage.setItem('aidev-api-key', state.key);
+        $('#setup').remove();
+        $('#app').hidden = false;
+        $('#keyState').classList.add('connected');
+        $('#keyState').textContent = 'Connecté';
+        openStream();
+      } catch (error) {
+        if ($('#setup')) {
+          $('#setupMessage').className = 'message error';
+          $('#setupMessage').textContent = error.message;
+          return;
+        }
+        $('#loading').hidden = true;
+        $('#body').hidden = true;
+        const failure = $('#failure');
+        failure.hidden = false;
+        failure.innerHTML = `<strong>Ce workflow est introuvable.</strong><br>${escape(error.message)} <a href="/">Revenir à la liste</a>`;
+      }
+    }
+
+    function connect() {
+      const key = $('#apiKey').value.trim();
+      if (!key) {
+        $('#setupMessage').className = 'message error';
+        $('#setupMessage').textContent = 'Saisissez la clé API de la plateforme.';
+        return;
+      }
+      state.key = key;
+      $('#setupMessage').className = 'message';
+      $('#setupMessage').textContent = 'Vérification…';
+      load();
+    }
+
+    $('#connect').addEventListener('click', connect);
+    $('#apiKey').addEventListener('keydown', event => { if (event.key === 'Enter') connect(); });
+    $('#disconnect').addEventListener('click', () => { localStorage.removeItem('aidev-api-key'); window.location.href = '/'; });
+
+    // A dropped stream must never leave a stale page behind: re-read on wake-up, and keep a slow
+    // safety poll for the proxies that quietly swallow server-sent events.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && state.detail && !isTerminal()) { refresh().catch(() => {}); openStream(); } });
+    setInterval(() => { if (!document.hidden && state.detail && !isTerminal()) refresh().catch(() => {}); }, 15000);
+    setInterval(tick, 1000);
+
+    if (!state.id) {
+      $('#setup').remove();
+      $('#app').hidden = false;
+      $('#loading').hidden = true;
+      $('#failure').hidden = false;
+      $('#failure').innerHTML = '<strong>Aucun workflow demandé.</strong><br>L’adresse doit contenir l’identifiant du workflow. <a href="/">Revenir à la liste</a>';
+    } else if (state.key) {
+      $('#apiKey').value = state.key;
+      load();
+    }
+  </script>
+</body>
+</html>

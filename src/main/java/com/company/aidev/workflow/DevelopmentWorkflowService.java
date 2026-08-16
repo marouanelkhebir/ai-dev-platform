@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
@@ -44,6 +45,7 @@ public class DevelopmentWorkflowService {
     private final GitLabProperties gitLabProperties;
     private final BranchPolicy branchPolicy;
     private final PlatformMetrics metrics;
+    private final ApplicationEventPublisher events;
 
     public DevelopmentWorkflowService(
             WorkflowRepository workflowRepository,
@@ -52,7 +54,8 @@ public class DevelopmentWorkflowService {
             GitLabClient gitLabClient,
             GitLabProperties gitLabProperties,
             BranchPolicy branchPolicy,
-            PlatformMetrics metrics) {
+            PlatformMetrics metrics,
+            ApplicationEventPublisher events) {
         this.workflowRepository = workflowRepository;
         this.engine = engine;
         this.stateStore = stateStore;
@@ -60,6 +63,7 @@ public class DevelopmentWorkflowService {
         this.gitLabProperties = gitLabProperties;
         this.branchPolicy = branchPolicy;
         this.metrics = metrics;
+        this.events = events;
     }
 
     /**
@@ -82,6 +86,7 @@ public class DevelopmentWorkflowService {
         workflow.setBranch(branchPolicy.branchFor(jiraTicket));
         WorkflowEntity saved = workflowRepository.save(workflow);
         metrics.workflowStarted(gitlabProjectId);
+        events.publishEvent(new WorkflowChangedEvent(saved));
         log.info("Workflow {} created for ticket {} on project {}", saved.getId(), jiraTicket, gitlabProjectId);
         return saved;
     }
@@ -96,6 +101,7 @@ public class DevelopmentWorkflowService {
         workflow.setBranch(branchPolicy.branchFor("message/" + requestId));
         WorkflowEntity saved = workflowRepository.save(workflow);
         metrics.workflowStarted(gitlabProjectId);
+        events.publishEvent(new WorkflowChangedEvent(saved));
         log.info("Workflow {} created from a direct request on project {}", saved.getId(), gitlabProjectId);
         return saved;
     }
@@ -140,6 +146,7 @@ public class DevelopmentWorkflowService {
         workflow.setClaimedAt(null);
         workflow.resetAttempts();
         WorkflowEntity saved = workflowRepository.save(workflow);
+        events.publishEvent(new WorkflowChangedEvent(saved));
         log.info("Workflow {} retried from {}", workflowId, resumeAt);
         return saved;
     }
@@ -161,6 +168,7 @@ public class DevelopmentWorkflowService {
         workflow.setClaimedAt(null);
         workflow.resetAttempts();
         WorkflowEntity saved = workflowRepository.save(workflow);
+        events.publishEvent(new WorkflowChangedEvent(saved));
         stateStore.recordTransition(
                 workflowId,
                 WorkflowStatus.NEEDS_CLARIFICATION,
@@ -179,8 +187,10 @@ public class DevelopmentWorkflowService {
         workflow.setStatus(WorkflowStatus.CANCELLED);
         workflow.setFailureReason("Cancelled");
         workflow.setClaimedAt(null);
+        WorkflowEntity saved = workflowRepository.save(workflow);
+        events.publishEvent(new WorkflowChangedEvent(saved));
         log.info("Workflow {} cancelled", workflowId);
-        return workflowRepository.save(workflow);
+        return saved;
     }
 
     /** Records the human decision that closes the workflow. The merge itself stays manual. */

@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,14 +30,17 @@ public class WorkflowStateStore {
     private final WorkflowRepository workflowRepository;
     private final WorkflowStepRepository stepRepository;
     private final WorkflowProperties properties;
+    private final ApplicationEventPublisher events;
 
     public WorkflowStateStore(
             WorkflowRepository workflowRepository,
             WorkflowStepRepository stepRepository,
-            WorkflowProperties properties) {
+            WorkflowProperties properties,
+            ApplicationEventPublisher events) {
         this.workflowRepository = workflowRepository;
         this.stepRepository = stepRepository;
         this.properties = properties;
+        this.events = events;
     }
 
     /**
@@ -79,7 +83,9 @@ public class WorkflowStateStore {
     @Transactional
     public WorkflowEntity save(WorkflowEntity workflow) {
         workflow.touch();
-        return workflowRepository.saveAndFlush(workflow);
+        WorkflowEntity saved = workflowRepository.saveAndFlush(workflow);
+        events.publishEvent(new WorkflowChangedEvent(saved));
+        return saved;
     }
 
     @Transactional
@@ -90,13 +96,15 @@ public class WorkflowStateStore {
     @Transactional
     public WorkflowStepEntity beginStep(UUID workflowId, WorkflowStatus from) {
         int sequence = stepRepository.findMaxSequenceNumber(workflowId) + 1;
-        return stepRepository.save(new WorkflowStepEntity(workflowId, sequence, from));
+        WorkflowStepEntity step = stepRepository.save(new WorkflowStepEntity(workflowId, sequence, from));
+        events.publishEvent(new WorkflowStepEvent(step));
+        return step;
     }
 
     @Transactional
     public void completeStep(WorkflowStepEntity step, WorkflowStatus to, boolean successful, String detail, String error) {
         step.complete(to, successful, detail, error);
-        stepRepository.save(step);
+        events.publishEvent(new WorkflowStepEvent(stepRepository.save(step)));
     }
 
     /** Records a human-driven state change that did not execute an engine step. */

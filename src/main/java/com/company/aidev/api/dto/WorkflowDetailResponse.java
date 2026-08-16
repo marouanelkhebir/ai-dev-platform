@@ -6,6 +6,7 @@ import com.company.aidev.domain.SecurityReport;
 import com.company.aidev.domain.TechnicalPlan;
 import com.company.aidev.domain.TestReport;
 import com.company.aidev.domain.TicketAnalysis;
+import com.company.aidev.persistence.entity.WorkflowStepEntity;
 import com.company.aidev.workflow.WorkflowStatus;
 import java.time.Instant;
 import java.util.List;
@@ -27,7 +28,11 @@ public record WorkflowDetailResponse(
         List<StepView> steps,
         List<AgentExecutionView> agentExecutions) {
 
-    /** One transition of the state machine. */
+    /**
+     * One transition of the state machine.
+     *
+     * <p>A step with no {@code to} is still running: the console times it from {@code startedAt}.
+     */
     public record StepView(
             int sequence,
             WorkflowStatus from,
@@ -36,7 +41,20 @@ public record WorkflowDetailResponse(
             Long durationMs,
             String detail,
             String error,
-            Instant startedAt) {}
+            Instant startedAt) {
+
+        public static StepView from(WorkflowStepEntity step) {
+            return new StepView(
+                    step.getSequenceNumber(),
+                    step.getStatusFrom(),
+                    step.getStatusTo(),
+                    step.getSuccessful(),
+                    step.getDurationMs(),
+                    step.getDetail(),
+                    step.getError(),
+                    step.getStartedAt());
+        }
+    }
 
     /** One agent invocation, without the prompts (which can be large and are fetched separately). */
     public record AgentExecutionView(
