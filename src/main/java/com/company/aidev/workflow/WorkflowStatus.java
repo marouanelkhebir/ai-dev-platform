@@ -18,7 +18,6 @@ public enum WorkflowStatus {
     RUNNING_LOCAL_TESTS,
     PUSHING,
     CREATING_MERGE_REQUEST,
-    WAITING_PIPELINE,
     CODE_REVIEW,
     SECURITY_REVIEW,
     ACCEPTANCE,
@@ -33,7 +32,7 @@ public enum WorkflowStatus {
     /** Terminal: cancelled by a human or by the API. */
     CANCELLED,
 
-    /** Terminal: a human approved the merge request. The merge itself stays manual. */
+    /** Terminal: the branch was pushed and its merge request was opened. The merge stays manual. */
     DONE;
 
     private static final Set<WorkflowStatus> TERMINAL =
@@ -41,7 +40,7 @@ public enum WorkflowStatus {
 
     /** States where the engine sleeps until an external event (webhook or human) wakes it up. */
     private static final Set<WorkflowStatus> WAITING_EXTERNAL =
-            EnumSet.of(WAITING_PIPELINE, WAITING_HUMAN_APPROVAL);
+            EnumSet.of(WAITING_HUMAN_APPROVAL);
 
     public boolean isTerminal() {
         return TERMINAL.contains(this);

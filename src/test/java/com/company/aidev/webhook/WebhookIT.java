@@ -1,27 +1,17 @@
 package com.company.aidev.webhook;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.company.aidev.gitlab.GitLabClient;
-import com.company.aidev.gitlab.model.Pipeline;
-import com.company.aidev.gitlab.model.PipelineStatus;
 import com.company.aidev.jira.JiraClient;
-import com.company.aidev.persistence.entity.WorkflowEntity;
 import com.company.aidev.persistence.repository.WebhookEventRepository;
 import com.company.aidev.persistence.repository.WorkflowRepository;
 import com.company.aidev.sandbox.SandboxManager;
 import com.company.aidev.workflow.WorkflowEngine;
-import com.company.aidev.workflow.WorkflowStatus;
-import java.util.Optional;
-import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -155,58 +145,14 @@ class WebhookIT {
     // ---------------------------------------------------------------- GitLab
 
     @Test
-    @DisplayName("a finished pipeline on an ai/ branch resumes the workflow")
-    void shouldResumeOnPipelineEvent() throws Exception {
-        WorkflowEntity workflow = givenWorkflowWaitingForPipeline();
-        when(gitLabClient.getPipeline(anyString(), anyLong()))
-                .thenReturn(Optional.of(new Pipeline(77L, PipelineStatus.SUCCESS, "ai/BANK-1250", "sha", "url")));
-
+    @DisplayName("a pipeline event is ignored because merge request creation completes the workflow")
+    void shouldIgnorePipelineEvent() throws Exception {
         mockMvc.perform(post("/webhooks/gitlab")
                         .header("X-Gitlab-Token", GITLAB_SECRET)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(pipelinePayload(77L, "success", "ai/BANK-1250")))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("resumed"));
-
-        verify(workflowEngine).onPipelineFinished(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
-        assertThat(workflowRepository.findById(workflow.getId())).isPresent();
-    }
-
-    @Test
-    @DisplayName("a pipeline on a branch the platform does not own is ignored")
-    void shouldIgnoreForeignBranch() throws Exception {
-        mockMvc.perform(post("/webhooks/gitlab")
-                        .header("X-Gitlab-Token", GITLAB_SECRET)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(pipelinePayload(78L, "success", "feature/manual-work")))
+                        .content(pipelinePayload(78L, "success", "ai/BANK-1250")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ignored"));
-
-        verify(workflowEngine, never())
-                .onPipelineFinished(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
-    }
-
-    @Test
-    @DisplayName("a redelivered pipeline event is processed once")
-    void shouldDeduplicatePipelineEvents() throws Exception {
-        givenWorkflowWaitingForPipeline();
-        when(gitLabClient.getPipeline(anyString(), anyLong()))
-                .thenReturn(Optional.of(new Pipeline(79L, PipelineStatus.SUCCESS, "ai/BANK-1250", "sha", "url")));
-        String payload = pipelinePayload(79L, "success", "ai/BANK-1250");
-
-        mockMvc.perform(post("/webhooks/gitlab")
-                        .header("X-Gitlab-Token", GITLAB_SECRET)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(status().isOk());
-        mockMvc.perform(post("/webhooks/gitlab")
-                        .header("X-Gitlab-Token", GITLAB_SECRET)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payload))
-                .andExpect(jsonPath("$.status").value("duplicate"));
-
-        verify(workflowEngine)
-                .onPipelineFinished(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -220,13 +166,6 @@ class WebhookIT {
     }
 
     // ------------------------------------------------------------- fixtures
-
-    private WorkflowEntity givenWorkflowWaitingForPipeline() {
-        WorkflowEntity workflow = new WorkflowEntity(UUID.randomUUID(), "BANK-1250", PROJECT, "main");
-        workflow.setBranch("ai/BANK-1250");
-        workflow.setStatus(WorkflowStatus.WAITING_PIPELINE);
-        return workflowRepository.save(workflow);
-    }
 
     private static String jiraPayload(String key, String label, String secondLabel, long timestamp) {
         return """

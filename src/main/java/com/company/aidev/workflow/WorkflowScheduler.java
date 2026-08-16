@@ -1,6 +1,5 @@
 package com.company.aidev.workflow;
 
-import com.company.aidev.config.GitLabProperties;
 import com.company.aidev.config.WorkflowProperties;
 import com.company.aidev.persistence.repository.WebhookEventRepository;
 import com.company.aidev.sandbox.SandboxManager;
@@ -30,19 +29,16 @@ public class WorkflowScheduler {
 
     private final DevelopmentWorkflowService workflowService;
     private final WorkflowProperties workflowProperties;
-    private final GitLabProperties gitLabProperties;
     private final SandboxManager sandboxManager;
     private final WebhookEventRepository webhookEventRepository;
 
     public WorkflowScheduler(
             DevelopmentWorkflowService workflowService,
             WorkflowProperties workflowProperties,
-            GitLabProperties gitLabProperties,
             SandboxManager sandboxManager,
             WebhookEventRepository webhookEventRepository) {
         this.workflowService = workflowService;
         this.workflowProperties = workflowProperties;
-        this.gitLabProperties = gitLabProperties;
         this.sandboxManager = sandboxManager;
         this.webhookEventRepository = webhookEventRepository;
     }
@@ -60,29 +56,6 @@ public class WorkflowScheduler {
         }
         log.info("Resuming {} runnable workflow(s)", ids.size());
         ids.forEach(workflowService::startAsync);
-    }
-
-    /** Recovers workflows whose pipeline webhook never arrived. */
-    @Scheduled(fixedDelayString = "${workflow.scheduler.pipeline-poll-interval:PT120S}")
-    public void pollPendingPipelines() {
-        Instant before = Instant.now().minus(gitLabProperties.pipeline().pollInterval());
-        for (UUID workflowId : workflowService.findWorkflowsWaitingForPipeline(before)) {
-            try {
-                workflowService.pollPipeline(workflowId).ifPresent(workflowService::startAsync);
-            } catch (RuntimeException e) {
-                log.warn("Pipeline poll failed for workflow {}: {}", workflowId, e.toString());
-            }
-        }
-    }
-
-    /** Fails workflows that waited for a pipeline far longer than any pipeline should take. */
-    @Scheduled(fixedDelayString = "${workflow.scheduler.timeout-interval:PT300S}")
-    public void failTimedOutPipelines() {
-        Instant deadline = Instant.now().minus(gitLabProperties.pipeline().timeout());
-        for (UUID workflowId : workflowService.findWorkflowsWaitingForPipeline(deadline)) {
-            log.warn("Workflow {} exceeded the pipeline timeout, cancelling the wait", workflowId);
-            workflowService.failPipelineTimeout(workflowId);
-        }
     }
 
     /** Removes containers that outlived their workflow. */

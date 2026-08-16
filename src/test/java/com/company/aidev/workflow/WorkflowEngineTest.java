@@ -45,9 +45,6 @@ import com.company.aidev.git.GitOperations;
 import com.company.aidev.gitlab.GitLabClient;
 import com.company.aidev.gitlab.model.GitLabProject;
 import com.company.aidev.gitlab.model.MergeRequest;
-import com.company.aidev.gitlab.model.Pipeline;
-import com.company.aidev.gitlab.model.PipelineJob;
-import com.company.aidev.gitlab.model.PipelineStatus;
 import com.company.aidev.jira.JiraClient;
 import com.company.aidev.jira.model.JiraIssue;
 import com.company.aidev.observability.PlatformMetrics;
@@ -174,20 +171,21 @@ class WorkflowEngineTest {
     }
 
     @Test
-    @DisplayName("a complete ticket runs from Jira to a merge request and stops to wait for the pipeline")
-    void shouldRunUntilPipelineWait() {
+    @DisplayName("a complete ticket runs from Jira to a merge request and then completes")
+    void shouldRunUntilMergeRequestCreation() {
         givenAnalysableTicket();
         givenPlannableRepository();
         givenSuccessfulDevelopment();
 
         engine.advance(workflow.getId());
 
-        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.WAITING_PIPELINE);
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.DONE);
         assertThat(workflow.getMergeRequestIid()).isEqualTo(42L);
         assertThat(workflow.getBranch()).isEqualTo("ai/BANK-1245");
         assertThat(workflow.getCommitSha()).isEqualTo("abc123");
 
         verify(gitOperations).push(any(), eq("ai/BANK-1245"));
+        verify(jiraClient).transitionTo(TICKET, "AI_READY_FOR_REVIEW");
         // The sandbox is always destroyed, even on the happy path.
         verify(sandboxManager).destroySandbox(any());
     }
@@ -205,7 +203,7 @@ class WorkflowEngineTest {
 
         engine.advance(workflow.getId());
 
-        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.WAITING_PIPELINE);
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.DONE);
         verify(jiraClient, never()).getIssue(anyString());
         verify(jiraClient, never()).addComment(anyString(), anyString());
         verify(jiraClient, never()).transitionTo(anyString(), anyString());
@@ -225,7 +223,7 @@ class WorkflowEngineTest {
 
         engine.advance(workflow.getId());
 
-        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.WAITING_PIPELINE);
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.DONE);
         verify(architectAgent).plan(any(), any(), any());
         verify(jiraClient, never()).transitionTo(anyString(), anyString());
     }
@@ -315,61 +313,7 @@ class WorkflowEngineTest {
                         any(),
                         any(),
                         org.mockito.ArgumentMatchers.contains("FeeTest#shouldSuspend"));
-        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.WAITING_PIPELINE);
-    }
-
-    @Test
-    @DisplayName("a successful pipeline moves the workflow to code review")
-    void shouldMoveToCodeReviewOnPipelineSuccess() {
-        workflow.setStatus(WorkflowStatus.WAITING_PIPELINE);
-
-        WorkflowStatus next = engine.onPipelineFinished(
-                workflow, new Pipeline(7L, PipelineStatus.SUCCESS, "ai/" + TICKET, "sha", "url"));
-
-        assertThat(next).isEqualTo(WorkflowStatus.CODE_REVIEW);
-        assertThat(workflow.getPipelineId()).isEqualTo(7L);
-    }
-
-    @Test
-    @DisplayName("a failing pipeline sends the job logs back to the developer")
-    void shouldSendPipelineLogsBackToDeveloper() {
-        workflow.setStatus(WorkflowStatus.WAITING_PIPELINE);
-        when(gitLabClient.getPipelineJobs(eq(PROJECT), anyLong()))
-                .thenReturn(List.of(new PipelineJob(9L, "unit-test", "test", PipelineStatus.FAILED, "url", false)));
-        when(gitLabClient.getJobLog(eq(PROJECT), eq(9L), anyInt())).thenReturn("FeeTest FAILED: NullPointerException");
-
-        WorkflowStatus next = engine.onPipelineFinished(
-                workflow, new Pipeline(7L, PipelineStatus.FAILED, "ai/" + TICKET, "sha", "url"));
-
-        assertThat(next).isEqualTo(WorkflowStatus.DEVELOPING);
-        assertThat(workflow.getPendingFeedback()).contains("unit-test", "NullPointerException");
-    }
-
-    @Test
-    @DisplayName("the pipeline retry loop is bounded")
-    void shouldGiveUpAfterRepeatedPipelineFailures() {
-        workflow.setStatus(WorkflowStatus.WAITING_PIPELINE);
-        Pipeline failed = new Pipeline(7L, PipelineStatus.FAILED, "ai/" + TICKET, "sha", "url");
-
-        engine.onPipelineFinished(workflow, failed);
-        workflow.setStatus(WorkflowStatus.WAITING_PIPELINE);
-        engine.onPipelineFinished(workflow, failed);
-        workflow.setStatus(WorkflowStatus.WAITING_PIPELINE);
-        WorkflowStatus third = engine.onPipelineFinished(workflow, failed);
-
-        assertThat(third).isEqualTo(WorkflowStatus.FAILED);
-        assertThat(workflow.getFailureReason()).contains("pipeline failed");
-    }
-
-    @Test
-    @DisplayName("a skipped pipeline is not treated as a pass")
-    void shouldNotTreatSkippedPipelineAsSuccess() {
-        workflow.setStatus(WorkflowStatus.WAITING_PIPELINE);
-
-        WorkflowStatus next = engine.onPipelineFinished(
-                workflow, new Pipeline(7L, PipelineStatus.SKIPPED, "ai/" + TICKET, "sha", "url"));
-
-        assertThat(next).isNotEqualTo(WorkflowStatus.CODE_REVIEW);
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.DONE);
     }
 
     @Test
@@ -408,7 +352,7 @@ class WorkflowEngineTest {
                         any(),
                         any(),
                         org.mockito.ArgumentMatchers.contains("NPE on null customer"));
-        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.WAITING_PIPELINE);
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.DONE);
     }
 
     @Test

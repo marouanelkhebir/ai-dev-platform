@@ -24,9 +24,6 @@ import com.company.aidev.gitlab.GitLabClient;
 import com.company.aidev.gitlab.model.CreateMergeRequestCommand;
 import com.company.aidev.gitlab.model.GitLabProject;
 import com.company.aidev.gitlab.model.MergeRequest;
-import com.company.aidev.gitlab.model.Pipeline;
-import com.company.aidev.gitlab.model.PipelineJob;
-import com.company.aidev.gitlab.model.PipelineStatus;
 import com.company.aidev.jira.JiraClient;
 import com.company.aidev.jira.model.JiraIssue;
 import com.company.aidev.observability.LogContext;
@@ -56,12 +53,12 @@ import org.springframework.stereotype.Component;
  * The orchestrator: a persisted state machine over the agent team.
  *
  * <p>One call to {@link #advance(UUID)} executes as many steps as possible and stops as soon as the
- * workflow has to wait for something outside the process — a GitLab pipeline or a human. Every
+ * workflow has to wait for a human. Every
  * transition is written to the database before the next one starts, so a restart resumes from the
  * last completed step rather than from the beginning.
  *
  * <p>Three loops are bounded, and each has its own counter so that a ticket cannot burn the budget of
- * another: development attempts, pipeline attempts, review attempts.
+ * another: development attempts and review attempts.
  */
 @Component
 public class WorkflowEngine {
@@ -69,7 +66,6 @@ public class WorkflowEngine {
     private static final Logger log = LoggerFactory.getLogger(WorkflowEngine.class);
 
     private static final int MAX_DIFF_CHARS = 120_000;
-    private static final int MAX_JOB_LOG_CHARS = 15_000;
     private static final int MAX_SCANNER_REPORT_CHARS = 40_000;
     private static final int MAX_STEPS_PER_RUN = 40;
 
@@ -223,7 +219,7 @@ public class WorkflowEngine {
             case CODE_REVIEW -> codeReview(run);
             case SECURITY_REVIEW -> securityReview(run);
             case ACCEPTANCE -> acceptance(run);
-            case WAITING_PIPELINE, WAITING_HUMAN_APPROVAL, DONE, FAILED, CANCELLED, NEEDS_CLARIFICATION ->
+            case WAITING_HUMAN_APPROVAL, DONE, FAILED, CANCELLED, NEEDS_CLARIFICATION ->
                 throw new IllegalStateException("Status " + status + " is not runnable");
         };
     }
@@ -398,7 +394,7 @@ public class WorkflowEngine {
 
         if (workflow.getMergeRequestIid() != null) {
             return StepOutcome.to(
-                    WorkflowStatus.WAITING_PIPELINE, "Merge request !" + workflow.getMergeRequestIid() + " updated");
+                    WorkflowStatus.DONE, "Merge request !" + workflow.getMergeRequestIid() + " updated");
         }
 
         TechnicalPlan technicalPlan =
@@ -435,7 +431,7 @@ public class WorkflowEngine {
                     "The AI development team opened a merge request: " + mergeRequest.webUrl());
         }
 
-        return StepOutcome.to(WorkflowStatus.WAITING_PIPELINE, "Merge request !" + mergeRequest.iid() + " created");
+        return StepOutcome.to(WorkflowStatus.DONE, "Merge request !" + mergeRequest.iid() + " created");
     }
 
     private StepOutcome codeReview(WorkflowRun run) {
@@ -523,42 +519,6 @@ public class WorkflowEngine {
                 report.passedCriteria() + "/" + report.totalCriteria() + " acceptance criteria covered");
     }
 
-    // ------------------------------------------------------- external events
-
-    /**
-     * Called when a GitLab pipeline finished on the workflow branch.
-     *
-     * @return the status the workflow moved to
-     */
-    public WorkflowStatus onPipelineFinished(WorkflowEntity workflow, Pipeline pipeline) {
-        workflow.setPipelineId(pipeline.id());
-
-        if (pipeline.status().isSuccessful()) {
-            workflow.setStatus(WorkflowStatus.CODE_REVIEW);
-            stateStore.save(workflow);
-            log.info("Pipeline {} succeeded, moving to code review", pipeline.id());
-            return WorkflowStatus.CODE_REVIEW;
-        }
-
-        metrics.pipelineFailed(workflow.getGitlabProject());
-        int attempt = workflow.incrementPipelineAttempts();
-        if (attempt > workflowProperties.maxPipelineAttempts()) {
-            workflow.setStatus(WorkflowStatus.FAILED);
-            workflow.setFailureReason("The GitLab pipeline failed " + (attempt - 1) + " times");
-            stateStore.save(workflow);
-            if (workflow.isJiraBacked()) {
-                transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().failed());
-            }
-            return WorkflowStatus.FAILED;
-        }
-
-        workflow.setPendingFeedback(buildPipelineFeedback(workflow, pipeline));
-        workflow.setStatus(WorkflowStatus.DEVELOPING);
-        stateStore.save(workflow);
-        log.info("Pipeline {} failed (attempt {}), sending the logs back to the developer", pipeline.id(), attempt);
-        return WorkflowStatus.DEVELOPING;
-    }
-
     /** Called when a human approved or merged the merge request. */
     public void onHumanApproval(WorkflowEntity workflow, String approver) {
         workflow.setStatus(WorkflowStatus.DONE);
@@ -605,27 +565,6 @@ public class WorkflowEngine {
             // Losing the report must not lose the work: the merge request already exists.
             log.warn("Unable to publish the final report on merge request !{}: {}", workflow.getMergeRequestIid(), e.toString());
         }
-    }
-
-    private String buildPipelineFeedback(WorkflowEntity workflow, Pipeline pipeline) {
-        StringBuilder sb = new StringBuilder("The GitLab CI pipeline failed (")
-                .append(pipeline.webUrl())
-                .append(").\n\n");
-        List<PipelineJob> failedJobs = gitLabClient.getPipelineJobs(workflow.getGitlabProject(), pipeline.id()).stream()
-                .filter(PipelineJob::isBlockingFailure)
-                .toList();
-
-        if (failedJobs.isEmpty()) {
-            sb.append("No failing job could be identified; check the pipeline manually.\n");
-            return sb.toString();
-        }
-        for (PipelineJob job : failedJobs) {
-            sb.append("## Job `").append(job.name()).append("` (stage ").append(job.stage()).append(") failed\n");
-            sb.append("```\n")
-                    .append(gitLabClient.getJobLog(workflow.getGitlabProject(), job.id(), MAX_JOB_LOG_CHARS))
-                    .append("\n```\n\n");
-        }
-        return sb.toString();
     }
 
     private String currentDiff(WorkflowEntity workflow) {
@@ -712,6 +651,11 @@ public class WorkflowEngine {
                 transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().failed());
                 commentJiraSafely(
                         workflow.getJiraTicket(), "The AI development team stopped: " + outcome.detail());
+            }
+        } else if (outcome.nextStatus() == WorkflowStatus.DONE) {
+            metrics.workflowSucceeded(workflow.getGitlabProject());
+            if (workflow.isJiraBacked()) {
+                transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().readyForReview());
             }
         }
         run.workflow(stateStore.save(workflow));

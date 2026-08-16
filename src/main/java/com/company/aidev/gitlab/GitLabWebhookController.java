@@ -6,8 +6,6 @@ import com.company.aidev.workflow.DevelopmentWorkflowService;
 import com.company.aidev.workflow.WebhookIdempotencyService;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -20,8 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Entry point for GitLab webhooks.
  *
- * <p>Two events matter: a pipeline that finished on an {@code ai/*} branch, which resumes the
- * workflow, and a merge request that a human approved or merged, which closes it.
+ * <p>Merge request events can close workflows that explicitly wait for human approval. Pipeline
+ * events do not resume a workflow: opening the merge request is terminal.
  */
 @RestController
 @RequestMapping("/webhooks/gitlab")
@@ -55,40 +53,9 @@ public class GitLabWebhookController {
 
         String objectKind = payload.path("object_kind").asText("");
         return switch (objectKind) {
-            case "pipeline" -> handlePipeline(payload);
             case "merge_request" -> handleMergeRequest(payload);
             default -> ResponseEntity.ok(Map.of("status", "ignored", "event", objectKind.isBlank() ? String.valueOf(event) : objectKind));
         };
-    }
-
-    private ResponseEntity<Map<String, Object>> handlePipeline(JsonNode payload) {
-        JsonNode attributes = payload.path("object_attributes");
-        long pipelineId = attributes.path("id").asLong();
-        String status = attributes.path("status").asText("");
-        String ref = attributes.path("ref").asText("");
-        String project = payload.path("project").path("path_with_namespace").asText("");
-
-        if (!idempotency.registerIfNew("gitlab", "pipeline:" + pipelineId + ":" + status, "pipeline", payload.toString())) {
-            return ResponseEntity.ok(Map.of("status", "duplicate", "pipeline", pipelineId));
-        }
-        if (!ref.startsWith(properties.branchPrefix())) {
-            return ResponseEntity.ok(Map.of("status", "ignored", "reason", "not an AI branch", "ref", ref));
-        }
-
-        Optional<UUID> toAdvance = workflowService.onPipelineEvent(project, ref, pipelineId, status);
-        toAdvance.ifPresent(workflowService::startAsync);
-
-        log.info(
-                "Pipeline webhook project={} ref={} pipeline={} status={} resumed={}",
-                project,
-                ref,
-                pipelineId,
-                status,
-                toAdvance.isPresent());
-        return ResponseEntity.ok(Map.of(
-                "status", toAdvance.isPresent() ? "resumed" : "ignored",
-                "pipeline", pipelineId,
-                "pipelineStatus", status));
     }
 
     private ResponseEntity<Map<String, Object>> handleMergeRequest(JsonNode payload) {

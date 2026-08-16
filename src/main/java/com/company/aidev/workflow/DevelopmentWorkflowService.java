@@ -3,8 +3,6 @@ package com.company.aidev.workflow;
 import com.company.aidev.config.AsyncConfig;
 import com.company.aidev.config.GitLabProperties;
 import com.company.aidev.gitlab.GitLabClient;
-import com.company.aidev.gitlab.model.Pipeline;
-import com.company.aidev.gitlab.model.PipelineStatus;
 import com.company.aidev.observability.PlatformMetrics;
 import com.company.aidev.persistence.entity.WorkflowEntity;
 import com.company.aidev.persistence.repository.WorkflowRepository;
@@ -197,42 +195,6 @@ public class DevelopmentWorkflowService {
         return get(workflowId);
     }
 
-    /**
-     * Applies a finished pipeline to the matching workflow.
-     *
-     * <p>Returns the workflow to advance rather than advancing it here: {@code @Async} does not apply
-     * to a call made from inside the same bean, and running a multi-minute step inside this
-     * transaction would hold a connection for the whole review round.
-     *
-     * @return the workflow id to advance, or empty when nothing matched
-     */
-    @Transactional
-    public Optional<UUID> onPipelineEvent(String gitlabProject, String ref, long pipelineId, String status) {
-        Optional<WorkflowEntity> found =
-                workflowRepository.findFirstByGitlabProjectAndBranchOrderByCreatedAtDesc(gitlabProject, ref);
-        if (found.isEmpty()) {
-            log.debug("No workflow for pipeline on {}@{}", gitlabProject, ref);
-            return Optional.empty();
-        }
-        WorkflowEntity workflow = found.get();
-        if (workflow.getStatus() != WorkflowStatus.WAITING_PIPELINE) {
-            log.debug(
-                    "Workflow {} is in status {}, ignoring the pipeline event", workflow.getId(), workflow.getStatus());
-            return Optional.empty();
-        }
-
-        Pipeline pipeline = gitLabClient
-                .getPipeline(gitlabProject, pipelineId)
-                .orElseGet(() -> new Pipeline(pipelineId, PipelineStatus.from(status), ref, null, ""));
-        if (!pipeline.status().isFinished()) {
-            return Optional.empty();
-        }
-
-        UUID workflowId = workflow.getId();
-        engine.onPipelineFinished(workflow, pipeline);
-        return Optional.of(workflowId);
-    }
-
     /** Resumes a workflow whose merge request was approved or merged by a human. */
     @Transactional
     public boolean onMergeRequestApproved(String gitlabProject, long mergeRequestIid, String approver) {
@@ -244,52 +206,6 @@ public class DevelopmentWorkflowService {
         }
         engine.onHumanApproval(found.get(), approver);
         return true;
-    }
-
-    /**
-     * Re-checks a pipeline the platform may have missed the webhook for.
-     *
-     * <p>Webhooks get lost — a deploy at the wrong moment, a network blip, a GitLab retry budget
-     * exhausted. Without this poll a workflow would sit in {@code WAITING_PIPELINE} forever.
-     *
-     * @return the workflow id to advance, or empty when the pipeline is not finished
-     */
-    @Transactional
-    public Optional<UUID> pollPipeline(UUID workflowId) {
-        WorkflowEntity workflow = get(workflowId);
-        if (workflow.getStatus() != WorkflowStatus.WAITING_PIPELINE || workflow.getBranch() == null) {
-            return Optional.empty();
-        }
-        Optional<Pipeline> pipeline =
-                gitLabClient.getLatestPipelineForRef(workflow.getGitlabProject(), workflow.getBranch());
-        if (pipeline.isEmpty() || !pipeline.get().status().isFinished()) {
-            return Optional.empty();
-        }
-        log.info("Pipeline {} recovered by polling for workflow {}", pipeline.get().id(), workflowId);
-        engine.onPipelineFinished(workflow, pipeline.get());
-        return Optional.of(workflowId);
-    }
-
-    /** Fails a workflow that waited for its pipeline beyond the configured timeout. */
-    @Transactional
-    public void failPipelineTimeout(UUID workflowId) {
-        WorkflowEntity workflow = get(workflowId);
-        if (workflow.getStatus() != WorkflowStatus.WAITING_PIPELINE) {
-            return;
-        }
-        workflow.setStatus(WorkflowStatus.FAILED);
-        workflow.setFailureReason("The GitLab pipeline did not finish within "
-                + gitLabProperties.pipeline().timeout());
-        workflow.setClaimedAt(null);
-        workflowRepository.save(workflow);
-        metrics.workflowFailed(workflow.getGitlabProject(), "pipeline-timeout");
-        log.warn("Workflow {} failed on pipeline timeout", workflowId);
-    }
-
-    /** Exposed so callers can find the workflows the scheduler should look at. */
-    @Transactional(readOnly = true)
-    public List<UUID> findWorkflowsWaitingForPipeline(java.time.Instant before) {
-        return workflowRepository.findIdsStuckInStatus(WorkflowStatus.WAITING_PIPELINE, before);
     }
 
     @Transactional(readOnly = true)
