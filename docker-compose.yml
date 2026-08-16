@@ -1,0 +1,99 @@
+# Local development stack.
+#
+# The platform connects directly to the user-configured OpenAI-compatible API.
+#
+# Before starting:
+#   docker build -t ai-dev-sandbox:21 docker/sandbox
+#   cp .env.example .env   # then fill in the tokens
+#   docker compose up --build
+#
+# Always bring the stack up as a whole. Starting the platform alone (`up ai-dev-platform --no-deps`)
+# leaves it with no database to resolve, and it fails at startup with
+# `UnknownHostException: postgres`.
+#
+# Requires Docker Compose v2 (`docker compose`, not the legacy `docker-compose` v1 binary): v1
+# ignores both the `name:` key and the `depends_on` conditions below.
+
+name: ai-dev-platform
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aidev
+      POSTGRES_USER: aidev
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-aidev}
+    ports:
+      # Host-side port only, for psql and tooling. The platform reaches postgres over the internal
+      # network by service name, so a clash here does not affect it.
+      - "${DB_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - aidev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aidev -d aidev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ai-dev-platform:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: json
+      DB_URL: jdbc:postgresql://postgres:5432/aidev
+      DB_USERNAME: aidev
+      DB_PASSWORD: ${DB_PASSWORD:-aidev}
+
+      PLATFORM_API_KEY: ${PLATFORM_API_KEY}
+
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MODEL_ANALYSIS: ${MODEL_ANALYSIS:-reasoning-model}
+      MODEL_CODING: ${MODEL_CODING:-coder-model}
+      MODEL_REVIEW: ${MODEL_REVIEW:-reasoning-model}
+      MODEL_FAST: ${MODEL_FAST:-fast-model}
+
+      JIRA_BASE_URL: ${JIRA_BASE_URL}
+      JIRA_EMAIL: ${JIRA_EMAIL}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN}
+      JIRA_WEBHOOK_SECRET: ${JIRA_WEBHOOK_SECRET}
+
+      GITLAB_BASE_URL: ${GITLAB_BASE_URL}
+      GITLAB_API_TOKEN: ${GITLAB_API_TOKEN}
+      GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET}
+
+      SANDBOX_IMAGE: ai-dev-sandbox:21
+      DOCKER_HOST: unix:///var/run/docker.sock
+    ports:
+      - "${SERVER_HOST_PORT:-8080}:8080"
+    networks:
+      - aidev
+    # The platform fails fast when the database is unreachable, which is the right behaviour for an
+    # orchestrator. Without a restart policy that turns a transient startup race into a dead
+    # container, so it is retried until postgres answers.
+    restart: unless-stopped
+    volumes:
+      # The platform drives the Docker daemon to create the ticket sandboxes.
+      # In production, prefer a socket proxy restricted to container operations over the raw socket.
+      - /var/run/docker.sock:/var/run/docker.sock
+    # The image runs as uid 1000; it must belong to the group owning the socket.
+    group_add:
+      - ${DOCKER_GROUP_ID:-999}
+
+# Declared explicitly rather than relying on the implicit default network: it pins every service to
+# the same bridge whatever the project name, so a container left over from another compose project
+# can never be mistaken for this one's database.
+networks:
+  aidev:
+    driver: bridge
+
+volumes:
+  postgres-data:

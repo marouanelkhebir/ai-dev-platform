@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>AI Dev Platform</title>
+  <style>
+    :root { --page:#07101c; --surface:#0c1827; --surface-raised:#122237; --line:#243750; --text:#edf4fc; --muted:#9aabc0; --accent:#66e0ad; --accent-ink:#042518; --warning:#f4be67; --danger:#ff929a; --blue:#80bfff; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:320px; color:var(--text); background:var(--page); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button,input { font:inherit; }
+    button { border:0; border-radius:10px; padding:10px 14px; background:var(--accent); color:var(--accent-ink); font-weight:750; cursor:pointer; transition:transform .16s ease,background .16s ease; }
+    button:hover:not(:disabled) { transform:translateY(-1px); background:#85e8bf; }
+    button:focus-visible,input:focus-visible { outline:3px solid #80bfff80; outline-offset:2px; }
+    button:disabled { cursor:not-allowed; opacity:.5; }
+    button.secondary { background:#1a2a40; color:var(--text); }
+    button.secondary:hover:not(:disabled) { background:#273b55; }
+    button.danger { color:#ffdfe1; background:#50232d; }
+    button.danger:hover:not(:disabled) { background:#6e2d3a; }
+    input { width:100%; border:1px solid #344a66; border-radius:10px; padding:11px 12px; color:var(--text); background:#081524; }
+    input::placeholder { color:#74869d; }
+    a { color:inherit; }
+    .shell { max-width:1440px; min-height:100vh; margin:auto; padding:0 30px 44px; }
+    .topbar { min-height:86px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:12px; text-decoration:none; }
+    .brand-mark { display:grid; width:30px; height:30px; place-items:center; border-radius:9px; background:var(--accent); color:#062519; font-weight:900; letter-spacing:-.08em; }
+    .brand strong { display:block; font-size:16px; letter-spacing:-.025em; }
+    .brand span { color:var(--muted); font-size:12px; }
+    .top-actions { display:flex; align-items:center; gap:12px; }
+    .key-state { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
+    .key-state::before { width:8px; height:8px; border-radius:50%; background:#53667e; content:""; }
+    .key-state.connected::before { background:var(--accent); box-shadow:0 0 0 4px #66e0ad20; }
+    .layout { display:grid; grid-template-columns:245px minmax(0,1fr); gap:32px; padding-top:32px; }
+    .rail { display:flex; flex-direction:column; gap:8px; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; color:var(--muted); text-decoration:none; font-weight:650; }
+    .nav-item.active { color:var(--text); background:#13243a; }
+    .nav-icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .rail-note { margin-top:26px; padding:16px; border:1px solid var(--line); border-radius:14px; color:var(--muted); font-size:13px; }
+    .rail-note strong { display:block; color:var(--text); margin-bottom:4px; }
+    .content { min-width:0; }
+    .page-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin:7px 0 28px; }
+    h1,h2,h3,p { margin:0; }
+    h1 { max-width:650px; font-size:clamp(28px,4vw,43px); line-height:1.08; letter-spacing:-.04em; }
+    h2 { font-size:18px; letter-spacing:-.02em; }
+    h3 { font-size:14px; }
+    .intro { max-width:650px; margin-top:9px; color:var(--muted); }
+    .workspace { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:22px; align-items:start; }
+    .panel { border:1px solid var(--line); border-radius:15px; background:var(--surface); }
+    .list-panel { overflow:hidden; }
+    .panel-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:19px 20px; border-bottom:1px solid var(--line); }
+    .panel-head p { margin-top:2px; color:var(--muted); font-size:13px; }
+    .workflow-list { min-height:260px; }
+    .workflow { display:grid; grid-template-columns:minmax(130px,1fr) minmax(150px,1.2fr) max-content 132px 20px; align-items:center; gap:16px; width:100%; padding:17px 20px; text-align:left; border-radius:0; border-bottom:1px solid #1c2c42; background:transparent; color:var(--text); font-weight:400; }
+    .workflow:last-child { border-bottom:0; }
+    .workflow:hover { transform:none; background:#102037; }
+    .workflow.selected { background:#142943; box-shadow:inset 3px 0 0 var(--accent); }
+    .workflow-ticket { font-weight:800; letter-spacing:-.01em; }
+    .workflow-project { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .workflow-date { color:var(--muted); font-size:13px; text-align:right; }
+    .arrow { color:var(--muted); font-size:20px; font-weight:400; }
+    .status { display:inline-flex; width:max-content; align-items:center; gap:7px; border-radius:999px; padding:4px 9px; color:#c6f5da; background:#164430; font-size:12px; font-weight:800; letter-spacing:.01em; }
+    .status::before { width:6px; height:6px; border-radius:50%; background:currentColor; content:""; }
+    .status.waiting { color:#ffe0a7; background:#47351a; }.status.failed,.status.cancelled { color:#ffd0d4; background:#522630; }.status.done { color:#cfe0ff; background:#243b60; }.status.idle { color:#c5d1df; background:#26384c; }
+    .empty { display:grid; min-height:260px; place-items:center; padding:36px; text-align:center; color:var(--muted); }.empty strong { display:block; color:var(--text); margin-bottom:5px; }
+    .create-panel { padding:21px; }
+    .create-panel > p { margin:5px 0 20px; color:var(--muted); font-size:13px; }
+    .field { margin-top:14px; }.field label { display:block; margin-bottom:6px; font-size:13px; font-weight:750; }.field small { display:block; margin-top:5px; color:var(--muted); font-size:12px; }
+    .create-panel button { width:100%; margin-top:20px; }
+    .message { min-height:20px; margin-top:12px; color:var(--muted); font-size:13px; }.message.error { color:var(--danger); }
+    .detail { margin-top:22px; }.detail[hidden] { display:none; }.detail-grid { display:grid; grid-template-columns:1.1fr .9fr; gap:22px; }.detail .panel { padding:21px; }
+    .detail-title { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; margin-bottom:20px; }.detail-title p { margin-top:4px; color:var(--muted); font-size:13px; }
+    .facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }.fact { padding:13px; background:#0a1625; border-radius:10px; }.fact span { display:block; color:var(--muted); font-size:12px; }.fact strong { display:block; overflow-wrap:anywhere; margin-top:3px; font-size:14px; }
+    .timeline { list-style:none; margin:0; padding:0; }.timeline li { display:grid; grid-template-columns:16px 1fr auto; gap:10px; align-items:start; padding:0 0 16px; color:var(--muted); font-size:13px; }.timeline li:last-child { padding-bottom:0; }.timeline-dot { width:9px; height:9px; margin-top:5px; border:2px solid var(--accent); border-radius:50%; }.timeline li.failed .timeline-dot { border-color:var(--danger); }.timeline strong { display:block; color:var(--text); font-size:14px; }.timeline time { color:var(--muted); font-size:12px; white-space:nowrap; }
+    .setup { display:grid; min-height:100vh; place-items:center; padding:24px; }#setup[hidden] { display:none!important; }.setup-card { width:min(500px,100%); padding:32px; border:1px solid var(--line); border-radius:18px; background:var(--surface); }.setup-card .brand { margin-bottom:34px; }.setup-card h1 { font-size:31px; }.setup-card p { margin-top:12px; color:var(--muted); }.setup-card label { display:block; margin:25px 0 7px; font-size:13px; font-weight:750; }.setup-card button { width:100%; margin-top:14px; }.help { margin-top:24px!important; padding-top:18px; border-top:1px solid var(--line); font-size:13px; }.help code { color:var(--text); }
+    @media (max-width:980px) { .layout { grid-template-columns:1fr; }.rail { flex-direction:row; }.rail-note { display:none; }.workspace { grid-template-columns:1fr; }.create-panel { max-width:none; }.detail-grid { grid-template-columns:1fr; } }
+    @media (max-width:640px) { .shell { padding:0 17px 30px; }.topbar { min-height:72px; }.key-state { display:none; }.layout { padding-top:20px; gap:19px; }.page-heading { align-items:flex-start; flex-direction:column; margin-bottom:20px; }.page-heading button { width:100%; }.workflow { grid-template-columns:1fr auto; gap:5px 12px; }.workflow-project { grid-column:1; }.workflow-date { grid-column:1; grid-row:3; text-align:left; }.arrow { grid-column:2; grid-row:1 / span 3; }.facts { grid-template-columns:1fr; }.top-actions .secondary { padding:9px 10px; font-size:13px; } }
+  </style>
+</head>
+<body>
+  <section class="setup" id="setup">
+    <div class="setup-card">
+      <a class="brand" href="/"><span class="brand-mark">AI</span><span><strong>AI Dev Platform</strong><span>Console de pilotage</span></span></a>
+      <h1>Ouvrir la console</h1>
+      <p>Utilisez la clé API de la plateforme pour consulter et piloter vos workflows. Elle reste uniquement dans ce navigateur.</p>
+      <label for="apiKey">Clé API plateforme</label><input id="apiKey" type="password" autocomplete="current-password" placeholder="Collez votre clé API">
+      <button id="connect">Accéder à la console</button>
+      <p class="message" id="setupMessage" aria-live="polite"></p>
+      <p class="help">Lors du premier démarrage, une clé est écrite dans les logs du serveur. Vous pouvez aussi définir <code>PLATFORM_API_KEY</code> dans votre environnement.</p>
+    </div>
+  </section>
+  <div class="shell" id="app" hidden>
+    <header class="topbar"><a class="brand" href="/"><span class="brand-mark">AI</span><span><strong>AI Dev Platform</strong><span>Console de pilotage</span></span></a><div class="top-actions"><span class="key-state" id="keyState">Clé API non vérifiée</span><button class="secondary" id="disconnect">Déconnecter</button></div></header>
+    <div class="layout">
+      <nav class="rail" aria-label="Navigation principale">
+        <a class="nav-item active" href="/"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/></svg>Workflows</a>
+        <a class="nav-item" href="/settings.html"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="m19.4 15 .1 1.4-1.7 2.1-1.4-.5a7.3 7.3 0 0 1-1.5.9l-.3 1.4-2.7.4-.7-1.3a7.8 7.8 0 0 1-1.7-.4l-1.1.9-2.4-1.3.2-1.5a7 7 0 0 1-1.1-1.3l-1.4-.1-.7-2.6 1.1-.9a7 7 0 0 1 .2-1.7l-1-1.1L6 7.1l1.4.2a7 7 0 0 1 1.3-1l.1-1.5 2.6-.7.9 1.1a7 7 0 0 1 1.7.2l1.1-1 2.3 1.3-.2 1.4a7 7 0 0 1 1.1 1.4l1.4.1.7 2.6-1.1.9a7 7 0 0 1-.2 1.8Z"/></svg>Paramètres</a>
+        <aside class="rail-note"><strong>Contrôle humain</strong>La fusion reste une action manuelle dans GitLab, même après approbation.</aside>
+      </nav>
+      <main class="content">
+        <div class="page-heading"><div><h1>Suivez chaque changement, du ticket à la revue.</h1><p class="intro">Lancez un workflow depuis un ticket Jira, surveillez son avancement et gardez une trace des décisions des agents.</p></div><button class="secondary" id="refresh">Actualiser</button></div>
+        <div class="workspace"><section class="panel list-panel"><div class="panel-head"><div><h2>Workflows récents</h2><p id="workflowCount">Chargement…</p></div></div><div class="workflow-list" id="workflowList"></div></section><aside class="panel create-panel"><h2>Nouveau workflow</h2><p>Le traitement démarre dès la création du ticket.</p><form id="createForm"><div class="field"><label for="ticket">Ticket Jira</label><input id="ticket" required pattern="[A-Z][A-Z0-9_]+-[0-9]+" placeholder="BANK-1245"><small>Ex. : BANK-1245</small></div><div class="field"><label for="project">Projet GitLab</label><input id="project" required placeholder="groupe/mon-projet"><small>Chemin GitLab ou identifiant numérique</small></div><button type="submit">Lancer le workflow</button><p class="message" id="createMessage" aria-live="polite"></p></form></aside></div>
+        <section class="detail" id="detail" hidden aria-live="polite"></section>
+      </main>
+    </div>
+  </div>
+  <script>
+    const $ = selector => document.querySelector(selector);
+    const state = { key: localStorage.getItem('aidev-api-key') || '', selected: null, workflows: [] };
+    const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+    const headers = () => ({ 'X-Api-Key': state.key, 'Content-Type': 'application/json' });
+    const formatDate = date => date ? new Intl.DateTimeFormat('fr-FR', {dateStyle:'medium', timeStyle:'short'}).format(new Date(date)) : '—';
+    const statusClass = status => /FAILED/.test(status) ? 'failed' : /CANCELLED/.test(status) ? 'cancelled' : /DONE/.test(status) ? 'done' : /WAITING/.test(status) ? 'waiting' : /CREATED/.test(status) ? 'idle' : '';
+    const status = value => `<span class="status ${statusClass(value)}">${escape((value || '').replaceAll('_', ' '))}</span>`;
+    async function request(url, options = {}) { const response = await fetch(url, {...options, headers:{...headers(), ...(options.headers || {})}}); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || 'La requête a échoué.'); return body; }
+    function renderList() { const list = $('#workflowList'); const count = $('#workflowCount'); count.textContent = state.workflows.length ? `${state.workflows.length} workflow${state.workflows.length > 1 ? 's' : ''} affiché${state.workflows.length > 1 ? 's' : ''}` : 'Aucun workflow pour le moment'; if (!state.workflows.length) { list.innerHTML = '<div class="empty"><div><strong>Aucun workflow lancé</strong>Créez votre premier workflow avec un ticket Jira et un projet GitLab.</div></div>'; return; } list.innerHTML = state.workflows.map(w => `<button class="workflow ${state.selected === w.id ? 'selected' : ''}" data-id="${escape(w.id)}"><span class="workflow-ticket">${escape(w.jiraTicket)}</span><span class="workflow-project">${escape(w.gitlabProject)}</span>${status(w.status)}<span class="workflow-date">${formatDate(w.updatedAt)}</span><span class="arrow" aria-hidden="true">›</span></button>`).join(''); list.querySelectorAll('[data-id]').forEach(button => button.addEventListener('click', () => selectWorkflow(button.dataset.id))); }
+    async function loadWorkflows() { $('#refresh').disabled = true; try { const page = await request('/api/workflows?size=50'); state.workflows = page.content || []; renderList(); if (state.selected) await selectWorkflow(state.selected, false); } catch (error) { $('#workflowList').innerHTML = `<div class="empty"><div><strong>Impossible de charger les workflows</strong>${escape(error.message)}</div></div>`; $('#workflowCount').textContent = 'Connexion requise'; throw error; } finally { $('#refresh').disabled = false; } }
+    async function selectWorkflow(id, scroll = true) { state.selected = id; renderList(); const detail = $('#detail'); detail.hidden = false; detail.innerHTML = '<div class="panel" style="padding:21px;color:var(--muted)">Chargement de l’historique…</div>'; if (scroll) detail.scrollIntoView({behavior:'smooth', block:'nearest'}); try { const data = await request(`/api/workflows/${id}`); const w = data.workflow; const steps = (data.steps || []).map(step => `<li class="${step.successful === false ? 'failed' : ''}"><span class="timeline-dot"></span><span><strong>${escape(step.to || 'Étape en cours')}</strong>${step.detail ? escape(step.detail) : step.error ? escape(step.error) : 'Transition enregistrée'}</span><time>${formatDate(step.startedAt)}</time></li>`).join('') || '<li><span class="timeline-dot"></span><span>Aucune transition enregistrée.</span></li>'; const agents = (data.agentExecutions || []).map(a => `<li class="${a.successful === false ? 'failed' : ''}"><span class="timeline-dot"></span><span><strong>${escape(a.agent)}</strong>${escape(a.model || 'Modèle non renseigné')} · tentative ${a.attempt}</span><time>${a.durationMs ? `${Math.round(a.durationMs / 1000)} s` : '—'}</time></li>`).join('') || '<li><span class="timeline-dot"></span><span>Aucun agent exécuté.</span></li>'; detail.innerHTML = `<div class="detail-grid"><article class="panel"><div class="detail-title"><div><h2>${escape(w.jiraTicket)}</h2><p>${escape(w.gitlabProject)}</p></div>${status(w.status)}</div><div class="facts"><div class="fact"><span>Branche</span><strong>${escape(w.branch || 'En attente')}</strong></div><div class="fact"><span>Branche cible</span><strong>${escape(w.baseBranch || '—')}</strong></div><div class="fact"><span>Merge request</span><strong>${w.mergeRequestUrl ? `<a href="${escape(w.mergeRequestUrl)}" target="_blank" rel="noopener">Ouvrir dans GitLab</a>` : 'Pas encore créée'}</strong></div><div class="fact"><span>Créé le</span><strong>${formatDate(w.createdAt)}</strong></div></div>${w.failureReason ? `<p class="message error">${escape(w.failureReason)}</p>` : ''}</article><article class="panel"><div class="detail-title"><div><h2>Journal des étapes</h2><p>Transitions enregistrées par l’orchestrateur</p></div></div><ol class="timeline">${steps}</ol></article><article class="panel"><div class="detail-title"><div><h2>Exécutions des agents</h2><p>Modèles appelés pour ce workflow</p></div></div><ol class="timeline">${agents}</ol></article></div>`; } catch (error) { detail.innerHTML = `<div class="panel" style="padding:21px;color:var(--danger)">Impossible de charger ce workflow : ${escape(error.message)}</div>`; } }
+    async function connect() { const key = $('#apiKey').value.trim(); if (!key) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = 'Saisissez la clé API de la plateforme.'; return; } state.key = key; $('#setupMessage').textContent = 'Vérification…'; try { await request('/api/workflows?size=1'); localStorage.setItem('aidev-api-key', key); $('#setup').remove(); $('#app').hidden = false; $('#keyState').classList.add('connected'); $('#keyState').textContent = 'Connecté'; await loadWorkflows(); } catch (error) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = error.message; } }
+    $('#connect').addEventListener('click', connect); $('#apiKey').addEventListener('keydown', event => { if (event.key === 'Enter') connect(); }); $('#refresh').addEventListener('click', loadWorkflows); $('#disconnect').addEventListener('click', () => { localStorage.removeItem('aidev-api-key'); window.location.reload(); });
+    $('#createForm').addEventListener('submit', async event => { event.preventDefault(); const message = $('#createMessage'); message.className = 'message'; message.textContent = 'Création…'; const button = event.currentTarget.querySelector('button'); button.disabled = true; try { const workflow = await request('/api/workflows', {method:'POST', body:JSON.stringify({jiraTicket:$('#ticket').value.trim().toUpperCase(), gitlabProjectId:$('#project').value.trim()})}); $('#ticket').value = ''; $('#project').value = ''; message.textContent = `Workflow ${workflow.jiraTicket} lancé.`; await loadWorkflows(); await selectWorkflow(workflow.id); } catch (error) { message.className = 'message error'; message.textContent = error.message; } finally { button.disabled = false; } });
+    if (state.key) { $('#apiKey').value = state.key; connect(); }
+  </script>
+</body>
+</html>

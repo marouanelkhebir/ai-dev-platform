@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Maven settings used inside the sandbox.
+
+  Replace the mirror URL with your internal Nexus/Artifactory. Never put credentials here: if the
+  mirror requires authentication, inject them through `sandbox.environment` and a server entry
+  resolved from environment variables, and give the sandbox a read-only account.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+    <localRepository>/home/builder/.m2/repository</localRepository>
+
+    <mirrors>
+        <mirror>
+            <id>company-central</id>
+            <name>Company Maven mirror</name>
+            <url>https://nexus.company.com/repository/maven-public/</url>
+            <mirrorOf>central</mirrorOf>
+        </mirror>
+    </mirrors>
+
+</settings>

@@ -1,0 +1,247 @@
+spring:
+  application:
+    name: ai-dev-platform
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/aidev}
+    username: ${DB_USERNAME:aidev}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-timeout: 10000
+      # Steps are long, but they never hold a connection: any leak beyond a minute is a bug.
+      leak-detection-threshold: 60000
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+  threads:
+    virtual:
+      enabled: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ai-dev-platform
+
+platform:
+  # Static key expected in the X-Api-Key header of every /api/** call.
+  api-key: ${PLATFORM_API_KEY:}
+
+# -------------------------------------------------- LLM (OpenAI-compatible API)
+ai:
+  openai:
+    # Configure these from the settings screen or with OPENAI_BASE_URL and OPENAI_API_KEY.
+    base-url: ${OPENAI_BASE_URL:}
+    api-key: ${OPENAI_API_KEY:}
+    timeout: ${OPENAI_TIMEOUT:PT5M}
+    max-retries: 2
+    log-requests: false
+    log-responses: false
+
+  # Logical roles mapped to model names. Change the right-hand side to swap a model.
+  models:
+    analysis: ${MODEL_ANALYSIS:reasoning-model}
+    coding: ${MODEL_CODING:coder-model}
+    review: ${MODEL_REVIEW:reasoning-model}
+    fast: ${MODEL_FAST:fast-model}
+
+  # Per-agent overrides. model-role selects which of the four models above is used.
+  agents:
+    jira-analyst:
+      model-role: ANALYSIS
+      temperature: 0.0
+      max-tokens: 4096
+      max-tool-calls: 10
+    architect:
+      model-role: ANALYSIS
+      temperature: 0.1
+      max-tokens: 8192
+      max-tool-calls: 40
+    developer:
+      model-role: CODING
+      temperature: 0.1
+      max-tokens: 16384
+      max-tool-calls: 120
+    test:
+      model-role: CODING
+      temperature: 0.1
+      max-tokens: 12288
+      max-tool-calls: 60
+    reviewer:
+      model-role: REVIEW
+      temperature: 0.0
+      max-tokens: 8192
+    security:
+      model-role: REVIEW
+      temperature: 0.0
+      max-tokens: 8192
+    acceptance:
+      model-role: ANALYSIS
+      temperature: 0.0
+      max-tokens: 8192
+
+# ---------------------------------------------------------------------- Jira
+jira:
+  base-url: ${JIRA_BASE_URL:https://company.atlassian.net}
+  email: ${JIRA_EMAIL:jira-ai-bot@company.com}
+  api-token: ${JIRA_API_TOKEN:}
+  # "3" for Jira Cloud, "2" for Jira Server / Data Center.
+  api-version: ${JIRA_API_VERSION:3}
+  connect-timeout: PT5S
+  read-timeout: PT30S
+  trigger:
+    label: ${JIRA_TRIGGER_LABEL:agent-ready}
+    status: ${JIRA_TRIGGER_STATUS:READY_FOR_AI}
+  statuses:
+    in-progress: AI_IN_PROGRESS
+    needs-clarification: AI_NEEDS_CLARIFICATION
+    ready-for-review: AI_READY_FOR_REVIEW
+    failed: AI_FAILED
+  webhook:
+    secret: ${JIRA_WEBHOOK_SECRET:}
+  # Custom fields holding the acceptance criteria; the description is parsed as a fallback.
+  acceptance-criteria-fields:
+    - ${JIRA_AC_FIELD:customfield_10100}
+
+# -------------------------------------------------------------------- GitLab
+gitlab:
+  base-url: ${GITLAB_BASE_URL:https://gitlab.company.com}
+  api-token: ${GITLAB_API_TOKEN:}
+  connect-timeout: PT5S
+  read-timeout: PT30S
+  branch-prefix: "ai/"
+  default-target-branch: main
+  # Branches the platform must never write to, whatever an agent decides.
+  protected-branches:
+    - main
+    - master
+    - develop
+    - release
+    - production
+  merge-request-label: AI-GENERATED
+  bot-name: gitlab-ai-bot
+  bot-email: gitlab-ai-bot@company.com
+  webhook:
+    secret: ${GITLAB_WEBHOOK_SECRET:}
+  pipeline:
+    timeout: PT60M
+    poll-interval: PT2M
+
+# ------------------------------------------------------------------- Sandbox
+sandbox:
+  docker-host: ${DOCKER_HOST:unix:///var/run/docker.sock}
+  image: ${SANDBOX_IMAGE:ai-dev-sandbox:21}
+  workspace-root: /workspaces
+  memory-limit-bytes: 4294967296
+  cpu-quota: 200000
+  pids-limit: 512
+  network-enabled: true
+  read-only-root-filesystem: false
+  command-timeout: PT20M
+  max-lifetime: PT2H
+  max-output-chars: 200000
+  # No shell here on purpose: commands are argv arrays, never shell strings.
+  allowed-executables:
+    - git
+    - mvn
+    - ./mvnw
+    - mvnw
+    - java
+    - ls
+    - cat
+    - grep
+    - find
+    - test
+  # Only these variables reach the container. No production credential is ever listed here.
+  environment:
+    MAVEN_OPTS: "-Xmx2g -Djava.awt.headless=true"
+    JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
+
+# ------------------------------------------------------------------ Workflow
+workflow:
+  max-development-attempts: 3
+  max-pipeline-attempts: 3
+  max-review-attempts: 3
+  step-timeout: PT45M
+  human-approval-timeout: P7D
+  stale-workflow-timeout: PT90M
+  executor-pool-size: ${WORKFLOW_POOL_SIZE:4}
+  auto-start-from-jira-webhook: true
+  # Automatic merge is not implemented in this version and must stay false.
+  allow-auto-merge: false
+  scheduler:
+    resume-interval: PT60S
+    pipeline-poll-interval: PT120S
+    timeout-interval: PT300S
+    sandbox-janitor-interval: PT600S
+    webhook-cleanup-cron: "0 30 3 * * *"
+
+# --------------------------------------------------------------- Resilience
+resilience4j:
+  retry:
+    instances:
+      jira:
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - java.io.IOException
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+      gitlab:
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - java.io.IOException
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+  circuitbreaker:
+    instances:
+      jira:
+        sliding-window-size: 20
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+      gitlab:
+        sliding-window-size: 20
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.company.aidev: INFO
+    dev.langchain4j: WARN
+    org.springframework.web: INFO

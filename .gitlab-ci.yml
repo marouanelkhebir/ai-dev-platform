@@ -1,0 +1,127 @@
+# CI of the AI Dev Platform itself.
+#
+# Note that this pipeline is not the one the agents interact with: they read the pipeline of the
+# repositories they modify. This one keeps the platform honest.
+
+stages:
+  - compile
+  - test
+  - integration-test
+  - quality
+  - package
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository -Djava.awt.headless=true"
+  MAVEN_CLI_OPTS: "-B -ntp --fail-at-end"
+  DOCKER_TLS_CERTDIR: ""
+
+default:
+  image: maven:3.9-eclipse-temurin-21
+  cache:
+    key:
+      files:
+        - pom.xml
+    paths:
+      - .m2/repository
+  interruptible: true
+
+# ------------------------------------------------------------------- compile
+compile:
+  stage: compile
+  script:
+    - mvn $MAVEN_CLI_OPTS clean compile
+  artifacts:
+    paths:
+      - target/classes
+    expire_in: 1 hour
+
+# ---------------------------------------------------------------------- test
+unit-test:
+  stage: test
+  script:
+    - mvn $MAVEN_CLI_OPTS test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - target/surefire-reports/TEST-*.xml
+    paths:
+      - target/jacoco.exec
+    expire_in: 1 week
+
+# ---------------------------------------------------------- integration-test
+integration-test:
+  stage: integration-test
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    # Testcontainers needs to reach the dind daemon.
+    TESTCONTAINERS_HOST_OVERRIDE: docker
+    TESTCONTAINERS_RYUK_DISABLED: "true"
+  script:
+    - mvn $MAVEN_CLI_OPTS verify -DskipUnitTests=false
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - target/failsafe-reports/TEST-*.xml
+    paths:
+      - target/site/jacoco
+    expire_in: 1 week
+
+# ------------------------------------------------------------------- quality
+sonarqube:
+  stage: quality
+  script:
+    - >
+      mvn $MAVEN_CLI_OPTS sonar:sonar
+      -Dsonar.projectKey=ai-dev-platform
+      -Dsonar.host.url=$SONAR_HOST_URL
+      -Dsonar.token=$SONAR_TOKEN
+      -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+  rules:
+    - if: $SONAR_HOST_URL == null
+      when: never
+    - when: on_success
+  allow_failure: true
+
+dependency-check:
+  stage: quality
+  script:
+    - mvn $MAVEN_CLI_OPTS dependency:tree
+    # The GitLab security templates below produce the reports the security agent reads.
+  allow_failure: true
+
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+# ------------------------------------------------------------------- package
+package:
+  stage: package
+  script:
+    - mvn $MAVEN_CLI_OPTS package -DskipTests
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 month
+
+container:
+  stage: package
+  image: docker:27
+  services:
+    - name: docker:27-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker build -t "$CI_REGISTRY_IMAGE/sandbox:$CI_COMMIT_SHORT_SHA" docker/sandbox
+    - docker push "$CI_REGISTRY_IMAGE/sandbox:$CI_COMMIT_SHORT_SHA"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

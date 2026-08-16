@@ -1,0 +1,60 @@
+# Configuration of the Spring integration tests.
+#
+# No external system is contacted: Jira, GitLab and the sandbox are replaced by mocks, and the
+# database is in memory. The credentials below are placeholders required by the @NotBlank validation
+# on the configuration records; nothing here is a real secret.
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:aidev;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+  flyway:
+    # The migration is exercised against a real PostgreSQL in FlywayMigrationIT.
+    enabled: false
+
+platform:
+  api-key: test-api-key
+
+ai:
+  openai:
+    base-url: http://localhost:9/v1
+    api-key: test-openai-key
+    timeout: PT5S
+  models:
+    analysis: test-analysis-model
+    coding: test-coding-model
+    review: test-review-model
+    fast: test-fast-model
+
+jira:
+  base-url: http://localhost:9
+  email: bot@company.test
+  api-token: test-jira-token
+  webhook:
+    secret: test-jira-webhook-secret
+
+gitlab:
+  base-url: http://localhost:9
+  api-token: test-gitlab-token
+  webhook:
+    secret: test-gitlab-webhook-secret
+
+sandbox:
+  docker-host: unix:///var/run/docker.sock
+
+workflow:
+  executor-pool-size: 1
+  scheduler:
+    # The recovery loops would fire during the tests and try to reach Docker.
+    enabled: false
+
+logging:
+  level:
+    com.company.aidev: WARN
+    org.hibernate: WARN

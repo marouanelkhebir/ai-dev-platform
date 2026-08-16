@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Structured logging.
+
+  The "json" profile emits one JSON object per line with the workflow context (workflowId,
+  jiraTicket, agent, model, gitlabProject, branch, mergeRequest, attempt) taken from the MDC, so a
+  whole ticket can be reconstructed with a single query. Secrets never reach the logs: everything
+  that could contain one goes through SecretRedactor before being logged or persisted.
+-->
+<configuration>
+
+    <springProperty scope="context" name="applicationName" source="spring.application.name" defaultValue="ai-dev-platform"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{workflowId:-}] [%X{jiraTicket:-}] [%X{agent:-}] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <springProfile name="json">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>workflowId</includeMdcKeyName>
+                <includeMdcKeyName>jiraTicket</includeMdcKeyName>
+                <includeMdcKeyName>agent</includeMdcKeyName>
+                <includeMdcKeyName>model</includeMdcKeyName>
+                <includeMdcKeyName>gitlabProject</includeMdcKeyName>
+                <includeMdcKeyName>branch</includeMdcKeyName>
+                <includeMdcKeyName>mergeRequest</includeMdcKeyName>
+                <includeMdcKeyName>attempt</includeMdcKeyName>
+                <includeMdcKeyName>durationMs</includeMdcKeyName>
+                <includeMdcKeyName>result</includeMdcKeyName>
+                <customFields>{"application":"${applicationName}"}</customFields>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!json">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <logger name="com.company.aidev" level="INFO"/>
+    <logger name="dev.langchain4j" level="WARN"/>
+    <logger name="com.github.dockerjava" level="WARN"/>
+
+</configuration>
