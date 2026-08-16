@@ -88,6 +88,20 @@ public class DevelopmentWorkflowService {
         return saved;
     }
 
+    /** Creates a new workflow from a free-form request. Direct requests deliberately are not deduplicated. */
+    @Transactional
+    public WorkflowEntity createFromMessage(String message, String gitlabProjectId) {
+        String requestId = "MSG-" + UUID.randomUUID().toString().replace("-", "");
+        WorkflowEntity workflow = new WorkflowEntity(
+                UUID.randomUUID(), requestId, gitlabProjectId, gitLabProperties.defaultTargetBranch());
+        workflow.setSourceMessage(message);
+        workflow.setBranch(branchPolicy.branchFor("message/" + requestId));
+        WorkflowEntity saved = workflowRepository.save(workflow);
+        metrics.workflowStarted(gitlabProjectId);
+        log.info("Workflow {} created from a direct request on project {}", saved.getId(), gitlabProjectId);
+        return saved;
+    }
+
     /** Runs the workflow on the executor; returns immediately. */
     @Async(AsyncConfig.WORKFLOW_EXECUTOR)
     public void startAsync(UUID workflowId) {
@@ -129,6 +143,32 @@ public class DevelopmentWorkflowService {
         workflow.resetAttempts();
         WorkflowEntity saved = workflowRepository.save(workflow);
         log.info("Workflow {} retried from {}", workflowId, resumeAt);
+        return saved;
+    }
+
+    /**
+     * Accepts the information requested by the analyst and restarts from the analysis gate.
+     * The original request and the clarification stay separate so the audit remains intelligible.
+     */
+    @Transactional
+    public WorkflowEntity clarify(UUID workflowId, String clarification) {
+        WorkflowEntity workflow = get(workflowId);
+        if (workflow.getStatus() != WorkflowStatus.NEEDS_CLARIFICATION) {
+            throw new IllegalStateException(
+                    "Workflow " + workflowId + " is not waiting for clarification (" + workflow.getStatus() + ")");
+        }
+        workflow.setHumanClarification(clarification.trim());
+        workflow.setStatus(WorkflowStatus.ANALYZING_JIRA);
+        workflow.setFailureReason(null);
+        workflow.setClaimedAt(null);
+        workflow.resetAttempts();
+        WorkflowEntity saved = workflowRepository.save(workflow);
+        stateStore.recordTransition(
+                workflowId,
+                WorkflowStatus.NEEDS_CLARIFICATION,
+                WorkflowStatus.ANALYZING_JIRA,
+                "Human clarification submitted; analysis restarted");
+        log.info("Workflow {} resumed after human clarification", workflowId);
         return saved;
     }
 

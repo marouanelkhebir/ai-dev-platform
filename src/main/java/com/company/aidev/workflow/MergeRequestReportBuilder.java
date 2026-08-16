@@ -41,7 +41,7 @@ public class MergeRequestReportBuilder {
             WorkflowEntity workflow, TicketAnalysis analysis, TechnicalPlan plan, TestReport testReport) {
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Jira:\n").append(jiraLink(analysis.ticketId())).append("\n\n");
+        appendSource(sb, workflow, analysis, "\n");
         sb.append("Objective:\n").append(analysis.objective()).append("\n\n");
 
         sb.append("Changes:\n");
@@ -86,7 +86,11 @@ public class MergeRequestReportBuilder {
 
         StringBuilder sb = new StringBuilder();
         sb.append("## AI Dev Platform report\n\n");
-        sb.append("Jira: ").append(jiraLink(analysis.ticketId())).append("  \n");
+        if (workflow.isJiraBacked()) {
+            sb.append("Jira: ").append(jiraLink(analysis.ticketId())).append("  \n");
+        } else {
+            sb.append("Direct request: `").append(analysis.ticketId()).append("`  \n");
+        }
         sb.append("Workflow: `").append(workflow.getId()).append("`  \n");
         sb.append("Development attempts: ").append(workflow.getDevelopmentAttempts()).append("\n\n");
 
@@ -182,6 +186,14 @@ public class MergeRequestReportBuilder {
         String base = jiraProperties.baseUrl();
         String normalized = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
         return "[" + ticketId + "](" + normalized + "/browse/" + ticketId + ")";
+    }
+
+    private void appendSource(StringBuilder sb, WorkflowEntity workflow, TicketAnalysis analysis, String suffix) {
+        if (workflow.isJiraBacked()) {
+            sb.append("Jira:\n").append(jiraLink(analysis.ticketId())).append(suffix);
+        } else {
+            sb.append("Direct request:\n").append(workflow.getSourceMessage()).append(suffix);
+        }
     }
 
     private static String shortObjective(String objective) {

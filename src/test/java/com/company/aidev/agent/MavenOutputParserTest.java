@@ -112,4 +112,18 @@ class MavenOutputParserTest {
 
         assertThat(feedback).contains("3/4 passed", "FeeServiceTest#shouldSuspend");
     }
+
+    @Test
+    @DisplayName("includes the Maven diagnostic when the build fails before tests")
+    void shouldIncludeBuildOutputInFeedbackForPreTestFailure() {
+        String output = "[ERROR] Non-resolvable parent POM for com.example:app:1.0";
+
+        String feedback = parser.parse(output, false).toFeedback();
+
+        assertThat(feedback).contains(
+                "- build:",
+                "Maven build failed",
+                "Build output:",
+                "Non-resolvable parent POM");
+    }
 }

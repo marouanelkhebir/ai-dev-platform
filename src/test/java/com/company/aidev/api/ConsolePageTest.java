@@ -19,4 +19,32 @@ class ConsolePageTest {
             assertThat(html).contains("localStorage.removeItem('aidev-api-key'); window.location.reload();");
         }
     }
+
+    @Test
+    void letsTheUserStartAWorkflowFromATicketOrDirectMessage() throws IOException {
+        try (var page = getClass().getResourceAsStream("/static/index.html")) {
+            assertThat(page).as("console page resource").isNotNull();
+
+            String html = new String(page.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertThat(html).contains("Message direct");
+            assertThat(html).contains("/api/workflows/message");
+            assertThat(html).contains("id=\"directMessage\"");
+        }
+    }
+
+    @Test
+    void letsTheUserClarifyAndResumeABlockedWorkflow() throws IOException {
+        try (var page = getClass().getResourceAsStream("/static/index.html")) {
+            assertThat(page).as("console page resource").isNotNull();
+
+            String html = new String(page.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertThat(html).contains("Compléter la demande");
+            assertThat(html).contains("/clarification");
+            assertThat(html).contains("Enregistrer et reprendre");
+            assertThat(html).contains("Retour de l’IA");
+            assertThat(html).contains("Ce que vous devez préciser");
+        }
+    }
 }

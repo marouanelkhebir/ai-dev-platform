@@ -1,5 +1,6 @@
 package com.company.aidev.sandbox;
 
+import com.company.aidev.domain.BuildProfile;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -14,7 +15,12 @@ import java.util.UUID;
 public interface SandboxManager {
 
     /** Creates a throwaway environment for one ticket. */
-    Sandbox createSandbox(UUID workflowId, String jiraTicket);
+    Sandbox createSandbox(UUID workflowId, String jiraTicket, BuildProfile profile);
+
+    /** Compatibility entry point for callers that intentionally require the Maven profile. */
+    default Sandbox createSandbox(UUID workflowId, String jiraTicket) {
+        return createSandbox(workflowId, jiraTicket, BuildProfile.MAVEN);
+    }
 
     /** Runs a command with the default timeout, from the repository root. */
     CommandResult execute(Sandbox sandbox, List<String> command);

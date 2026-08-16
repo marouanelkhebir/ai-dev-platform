@@ -2,6 +2,7 @@ package com.company.aidev.agent;
 
 import com.company.aidev.config.SandboxProperties;
 import com.company.aidev.domain.RepositoryRules;
+import com.company.aidev.domain.BuildProfile;
 import com.company.aidev.domain.TestReport;
 import com.company.aidev.domain.TicketAnalysis;
 import com.company.aidev.git.GitOperations;
@@ -13,6 +14,7 @@ import com.company.aidev.sandbox.SandboxManager;
 import com.company.aidev.tool.FileTools;
 import com.company.aidev.tool.GitTools;
 import com.company.aidev.tool.MavenTools;
+import com.company.aidev.tool.NpmTools;
 import com.company.aidev.tool.ToolContext;
 import com.company.aidev.tool.ToolExecutionRecorder;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -70,7 +72,8 @@ public class TestAgent {
     public TestReport runAndAnalyse(
             UUID workflowId, Sandbox sandbox, int attempt, TicketAnalysis analysis, RepositoryRules rules) {
 
-        TestReport report = runBuild(sandbox);
+        BuildProfile profile = BuildProfile.detect(sandboxManager, sandbox);
+        TestReport report = runBuild(sandbox, profile);
         if (!report.successful()) {
             log.info(
                     "Build red for {} on attempt {}: {} failing test(s)",
@@ -82,11 +85,11 @@ public class TestAgent {
             return report;
         }
 
-        List<String> missing = analyseCoverageGaps(workflowId, sandbox, attempt, analysis, rules);
+        List<String> missing = analyseCoverageGaps(workflowId, sandbox, attempt, analysis, rules, profile);
 
         // The agent may have written new tests. Re-run the build so the reported result always
         // describes the workspace as it will be committed, not as it was before the gap analysis.
-        TestReport finalReport = runBuild(sandbox);
+        TestReport finalReport = runBuild(sandbox, profile);
         log.info(
                 "Tests for {} attempt {}: {}/{} passed, {} coverage gap(s) reported",
                 analysis.ticketId(),
@@ -105,8 +108,14 @@ public class TestAgent {
                 finalReport.rawOutputExcerpt());
     }
 
-    /** Runs {@code mvn verify} (or the wrapper) and parses the log. */
-    TestReport runBuild(Sandbox sandbox) {
+    /** Runs the deterministic validation command for the detected repository profile. */
+    TestReport runBuild(Sandbox sandbox, BuildProfile profile) {
+        if (profile == BuildProfile.ANGULAR) {
+            return runAngularBuild(sandbox);
+        }
+        if (profile == BuildProfile.UNSUPPORTED) {
+            return TestReport.failed("", "Unsupported repository build profile");
+        }
         boolean hasWrapper = sandboxManager.exists(sandbox, "mvnw");
         List<String> command = List.of(hasWrapper ? "./mvnw" : "mvn", "-B", "-ntp", "verify");
 
@@ -121,16 +130,37 @@ public class TestAgent {
         return outputParser.parse(result.combinedOutput(), result.successful());
     }
 
+    private TestReport runAngularBuild(Sandbox sandbox) {
+        StringBuilder output = new StringBuilder();
+        for (List<String> command : List.of(
+                List.of("npm", "ci"),
+                List.of("npm", "test", "--", "--watch=false"),
+                List.of("npm", "run", "build"))) {
+            CommandResult result = sandboxManager.execute(
+                    sandbox, command, sandbox.repositoryPath(), sandboxProperties.commandTimeout());
+            output.append(result.toToolOutput(20_000)).append('\n');
+            if (result.timedOut()) {
+                return TestReport.failed(output.toString(), "Angular build timed out while running " + String.join(" ", command));
+            }
+            if (!result.successful()) {
+                return TestReport.failed(output.toString(), "Angular build failed while running " + String.join(" ", command));
+            }
+        }
+        return new TestReport(true, 0, 0, 0, List.of(), List.of(), output.toString());
+    }
+
     private List<String> analyseCoverageGaps(
-            UUID workflowId, Sandbox sandbox, int attempt, TicketAnalysis analysis, RepositoryRules rules) {
+            UUID workflowId, Sandbox sandbox, int attempt, TicketAnalysis analysis, RepositoryRules rules, BuildProfile profile) {
 
         AgentExecutionEntity execution = agentSupport.beginExecution(AgentType.TEST, workflowId, attempt);
         ToolContext toolContext = new ToolContext(workflowId, execution.getId(), sandbox);
 
-        List<Object> tools = List.of(
-                new FileTools(sandboxManager, toolRecorder, toolContext),
-                new MavenTools(sandboxManager, toolRecorder, toolContext),
-                new GitTools(gitOperations, toolRecorder, toolContext));
+        List<Object> tools = new java.util.ArrayList<>();
+        tools.add(new FileTools(sandboxManager, toolRecorder, toolContext));
+        tools.add(profile == BuildProfile.ANGULAR
+                ? new NpmTools(sandboxManager, toolRecorder, toolContext)
+                : new MavenTools(sandboxManager, toolRecorder, toolContext));
+        tools.add(new GitTools(gitOperations, toolRecorder, toolContext));
 
         String diff = gitOperations.diff(sandbox, MAX_DIFF_CHARS);
         String systemPrompt = promptLoader.load("test");

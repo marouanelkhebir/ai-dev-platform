@@ -38,14 +38,22 @@ public class RestClientConfig {
                 .build();
     }
 
-    @Bean
-    public RestClient gitlabRestClient(GitLabProperties properties) {
+    /**
+     * Builds a GitLab client from an effective settings snapshot.
+     *
+     * <p>This intentionally is not a bean: GitLab settings can be changed from the settings
+     * screen after the application has started. A singleton client constructed here at startup
+     * would retain the bootstrap fallback URL and an obsolete token.
+     */
+    public static RestClient gitlabRestClient(GitLabProperties properties) {
+        if (!properties.isConfigured()) {
+            throw new IllegalStateException("GitLab is not configured: set the URL and API token in the settings screen");
+        }
         // GitLab identifies projects and file paths as URL-encoded segments ("group%2Fproject").
         // The default TEMPLATE_AND_VALUES mode would re-encode the percent signs, so encoding is done
         // explicitly in RestGitLabClient and disabled here.
         // See the equivalent Jira fallback above: integrations are configured after first boot.
-        DefaultUriBuilderFactory uriBuilderFactory =
-                new DefaultUriBuilderFactory(properties.isConfigured() ? properties.apiBaseUrl() : "http://localhost");
+        DefaultUriBuilderFactory uriBuilderFactory = new DefaultUriBuilderFactory(properties.apiBaseUrl());
         uriBuilderFactory.setEncodingMode(DefaultUriBuilderFactory.EncodingMode.NONE);
 
         return RestClient.builder()

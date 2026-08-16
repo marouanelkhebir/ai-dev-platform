@@ -1,5 +1,6 @@
 package com.company.aidev.workflow;
 
+import com.company.aidev.domain.RepositoryContext;
 import com.company.aidev.domain.RepositoryRules;
 import com.company.aidev.persistence.entity.WorkflowEntity;
 import com.company.aidev.sandbox.Sandbox;
@@ -16,6 +17,7 @@ class WorkflowRun {
     private WorkflowEntity workflow;
     private Sandbox sandbox;
     private RepositoryRules rules;
+    private RepositoryContext repositoryContext;
 
     WorkflowRun(WorkflowEntity workflow) {
         this.workflow = workflow;
@@ -53,5 +55,13 @@ class WorkflowRun {
 
     void rules(RepositoryRules rules) {
         this.rules = rules;
+    }
+
+    RepositoryContext repositoryContext() {
+        return repositoryContext;
+    }
+
+    void repositoryContext(RepositoryContext repositoryContext) {
+        this.repositoryContext = repositoryContext;
     }
 }

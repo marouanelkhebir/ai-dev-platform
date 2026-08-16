@@ -11,6 +11,7 @@ import com.company.aidev.config.GitLabProperties;
 import com.company.aidev.config.JiraProperties;
 import com.company.aidev.config.WorkflowProperties;
 import com.company.aidev.domain.AcceptanceReport;
+import com.company.aidev.domain.BuildProfile;
 import com.company.aidev.domain.CodeReview;
 import com.company.aidev.domain.DevelopmentResult;
 import com.company.aidev.domain.RepositoryContext;
@@ -231,30 +232,63 @@ public class WorkflowEngine {
 
     private StepOutcome analyzeJira(WorkflowRun run) {
         WorkflowEntity workflow = run.workflow();
-        JiraIssue issue = jiraClient.getIssue(workflow.getJiraTicket());
-        TicketAnalysis analysis = jiraAnalystAgent.analyze(workflow.getId(), issue);
+        GitLabProject project = gitLabClient.getProject(workflow.getGitlabProject());
+        String baseBranch = project.defaultBranch() == null || project.defaultBranch().isBlank()
+                ? gitLabProperties.defaultTargetBranch()
+                : project.defaultBranch();
+        workflow.setBaseBranch(baseBranch);
+
+        // Load the project before the analyst decides that human input is necessary. This gives the
+        // analyst both a repository summary and read-only file tools, so technical scope can be
+        // established from the code instead of being turned into a clarification question.
+        RepositoryContext context = rulesLoader.loadContext(workflow.getGitlabProject(), baseBranch);
+        run.repositoryContext(context);
+        run.rules(context.rules());
+        BuildProfile buildProfile = BuildProfile.detect(context);
+        workflow.setBuildProfile(buildProfile);
+        if (buildProfile == BuildProfile.UNSUPPORTED) {
+            return StepOutcome.to(
+                    WorkflowStatus.FAILED,
+                    "Unsupported repository type: expected angular.json or pom.xml/mvnw at the repository root");
+        }
+
+        TicketAnalysis analysis;
+        if (workflow.isJiraBacked()) {
+            JiraIssue issue = jiraClient.getIssue(workflow.getJiraTicket());
+            analysis = jiraAnalystAgent.analyze(workflow.getId(), issue, context, workflow.getHumanClarification());
+        } else {
+            analysis = jiraAnalystAgent.analyzeMessage(
+                    workflow.getId(), workflow.getJiraTicket(), workflow.getSourceMessage(), context, workflow.getHumanClarification());
+        }
         workflow.setTicketAnalysisJson(codec.write(analysis));
 
-        if (analysis.blocksAutomation()) {
-            String reason = analysis.acceptanceCriteria().isEmpty()
+        boolean missingAcceptanceCriteria = analysis.acceptanceCriteria().isEmpty();
+        boolean needsClarification = !analysis.ambiguities().isEmpty()
+                || (workflow.isJiraBacked() && missingAcceptanceCriteria);
+        if (needsClarification) {
+            String reason = workflow.isJiraBacked() && missingAcceptanceCriteria
                     ? "The ticket has no acceptance criteria, so nothing can be verified."
                     : "The ticket contains ambiguities that must be resolved by a human.";
-            commentJiraSafely(
-                    workflow.getJiraTicket(),
-                    """
-                    The AI development team stopped on this ticket.
+            if (workflow.isJiraBacked()) {
+                commentJiraSafely(
+                        workflow.getJiraTicket(),
+                        """
+                        The AI development team stopped on this ticket.
 
-                    %s
+                        %s
 
-                    Points to clarify:
-                    %s
-                    """
-                            .formatted(reason, bullets(analysis.ambiguities())));
-            transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().needsClarification());
+                        Points to clarify:
+                        %s
+                        """
+                                .formatted(reason, bullets(analysis.ambiguities())));
+                transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().needsClarification());
+            }
             return StepOutcome.to(WorkflowStatus.NEEDS_CLARIFICATION, reason);
         }
 
-        transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().inProgress());
+        if (workflow.isJiraBacked()) {
+            transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().inProgress());
+        }
         return StepOutcome.to(
                 WorkflowStatus.PLANNING, analysis.acceptanceCriteria().size() + " acceptance criteria identified");
     }
@@ -269,7 +303,11 @@ public class WorkflowEngine {
                 : project.defaultBranch();
         workflow.setBaseBranch(baseBranch);
 
-        RepositoryContext context = rulesLoader.loadContext(workflow.getGitlabProject(), baseBranch);
+        RepositoryContext context = run.repositoryContext();
+        if (context == null) {
+            context = rulesLoader.loadContext(workflow.getGitlabProject(), baseBranch);
+            run.repositoryContext(context);
+        }
         run.rules(context.rules());
 
         TechnicalPlan technicalPlan = architectAgent.plan(workflow.getId(), analysis, context);
@@ -326,7 +364,10 @@ public class WorkflowEngine {
 
         if (!report.successful()) {
             workflow.setPendingFeedback(report.toFeedback());
-            return StepOutcome.to(WorkflowStatus.DEVELOPING, report.failedTests() + " test(s) failing, retrying");
+            String detail = report.failedTests() == 0
+                    ? "Build failed without a test failure, retrying"
+                    : report.failedTests() + " test(s) failing, retrying";
+            return StepOutcome.to(WorkflowStatus.DEVELOPING, detail);
         }
         return StepOutcome.to(WorkflowStatus.PUSHING, report.totalTests() + " test(s) passing");
     }
@@ -388,9 +429,11 @@ public class WorkflowEngine {
                 mergeRequest.title()));
         metrics.mergeRequestCreated(workflow.getGitlabProject());
 
-        commentJiraSafely(
-                workflow.getJiraTicket(),
-                "The AI development team opened a merge request: " + mergeRequest.webUrl());
+        if (workflow.isJiraBacked()) {
+            commentJiraSafely(
+                    workflow.getJiraTicket(),
+                    "The AI development team opened a merge request: " + mergeRequest.webUrl());
+        }
 
         return StepOutcome.to(WorkflowStatus.WAITING_PIPELINE, "Merge request !" + mergeRequest.iid() + " created");
     }
@@ -472,7 +515,9 @@ public class WorkflowEngine {
         }
 
         publishFinalReport(workflow, analysis, testReport);
-        transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().readyForReview());
+        if (workflow.isJiraBacked()) {
+            transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().readyForReview());
+        }
         return StepOutcome.to(
                 WorkflowStatus.WAITING_HUMAN_APPROVAL,
                 report.passedCriteria() + "/" + report.totalCriteria() + " acceptance criteria covered");
@@ -501,7 +546,9 @@ public class WorkflowEngine {
             workflow.setStatus(WorkflowStatus.FAILED);
             workflow.setFailureReason("The GitLab pipeline failed " + (attempt - 1) + " times");
             stateStore.save(workflow);
-            transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().failed());
+            if (workflow.isJiraBacked()) {
+                transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().failed());
+            }
             return WorkflowStatus.FAILED;
         }
 
@@ -517,9 +564,11 @@ public class WorkflowEngine {
         workflow.setStatus(WorkflowStatus.DONE);
         stateStore.save(workflow);
         metrics.workflowSucceeded(workflow.getGitlabProject());
-        commentJiraSafely(
-                workflow.getJiraTicket(),
-                "The merge request " + workflow.getMergeRequestUrl() + " was approved by " + approver + ".");
+        if (workflow.isJiraBacked()) {
+            commentJiraSafely(
+                    workflow.getJiraTicket(),
+                    "The merge request " + workflow.getMergeRequestUrl() + " was approved by " + approver + ".");
+        }
         log.info("Workflow {} approved by {}", workflow.getId(), approver);
     }
 
@@ -533,6 +582,7 @@ public class WorkflowEngine {
                     detail + " and the review loop was exhausted after " + workflowProperties.maxReviewAttempts()
                             + " rounds");
         }
+        workflow.resetDevelopmentAttempts();
         workflow.setPendingFeedback(feedback);
         return StepOutcome.to(WorkflowStatus.DEVELOPING, detail + " (round " + attempt + ")");
     }
@@ -608,7 +658,11 @@ public class WorkflowEngine {
         }
         branchPolicy.assertAgentBranch(workflow.getBranch());
 
-        Sandbox sandbox = sandboxManager.createSandbox(workflow.getId(), workflow.getJiraTicket());
+        BuildProfile buildProfile = resolveBuildProfile(run);
+        if (buildProfile == BuildProfile.UNSUPPORTED) {
+            throw new IllegalStateException("Cannot create a sandbox for an unsupported repository type");
+        }
+        Sandbox sandbox = sandboxManager.createSandbox(workflow.getId(), workflow.getJiraTicket(), buildProfile);
         run.sandbox(sandbox);
 
         gitOperations.cloneRepository(sandbox, project, workflow.getBaseBranch());
@@ -621,6 +675,22 @@ public class WorkflowEngine {
         if (run.rules().isEmpty()) {
             run.rules(rulesLoader.loadRules(workflow.getGitlabProject(), workflow.getBaseBranch()));
         }
+    }
+
+    private BuildProfile resolveBuildProfile(WorkflowRun run) {
+        WorkflowEntity workflow = run.workflow();
+        if (workflow.getBuildProfile() != null) {
+            return workflow.getBuildProfile();
+        }
+        RepositoryContext context = run.repositoryContext();
+        if (context == null) {
+            context = rulesLoader.loadContext(workflow.getGitlabProject(), workflow.getBaseBranch());
+            run.repositoryContext(context);
+            run.rules(context.rules());
+        }
+        BuildProfile profile = BuildProfile.detect(context);
+        workflow.setBuildProfile(profile);
+        return profile;
     }
 
     private void destroySandbox(WorkflowRun run) {
@@ -638,9 +708,11 @@ public class WorkflowEngine {
         if (outcome.nextStatus() == WorkflowStatus.FAILED) {
             workflow.setFailureReason(outcome.detail());
             metrics.workflowFailed(workflow.getGitlabProject(), previous.name());
-            transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().failed());
-            commentJiraSafely(
-                    workflow.getJiraTicket(), "The AI development team stopped: " + outcome.detail());
+            if (workflow.isJiraBacked()) {
+                transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().failed());
+                commentJiraSafely(
+                        workflow.getJiraTicket(), "The AI development team stopped: " + outcome.detail());
+            }
         }
         run.workflow(stateStore.save(workflow));
         log.info("Workflow {} moved {} -> {} ({})", workflow.getId(), previous, outcome.nextStatus(), outcome.detail());
@@ -656,8 +728,10 @@ public class WorkflowEngine {
         } catch (RuntimeException e) {
             log.error("Unable to persist the failure of workflow {}", workflow.getId(), e);
         }
-        transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().failed());
-        commentJiraSafely(workflow.getJiraTicket(), "The AI development team stopped: " + reason);
+        if (workflow.isJiraBacked()) {
+            transitionJiraSafely(workflow.getJiraTicket(), jiraProperties.statuses().failed());
+            commentJiraSafely(workflow.getJiraTicket(), "The AI development team stopped: " + reason);
+        }
     }
 
     private TicketAnalysis requireAnalysis(WorkflowEntity workflow) {

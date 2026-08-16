@@ -4,6 +4,7 @@
 #
 # Before starting:
 #   docker build -t ai-dev-sandbox:21 docker/sandbox
+#   docker build -t ai-dev-sandbox-angular:22 docker/sandbox-angular
 #   cp .env.example .env   # then fill in the tokens
 #   docker compose up --build
 #
@@ -71,6 +72,7 @@ services:
       GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET}
 
       SANDBOX_IMAGE: ai-dev-sandbox:21
+      SANDBOX_ANGULAR_IMAGE: ai-dev-sandbox-angular:22
       DOCKER_HOST: unix:///var/run/docker.sock
     ports:
       - "${SERVER_HOST_PORT:-8080}:8080"
@@ -80,13 +82,15 @@ services:
     # orchestrator. Without a restart policy that turns a transient startup race into a dead
     # container, so it is retried until postgres answers.
     restart: unless-stopped
+    # Docker Desktop for macOS exposes its socket as owner-writable only. The raw Docker socket
+    # already grants host-equivalent container control, so run the trusted orchestrator as root
+    # rather than pretending that a supplemental group can safely grant access on every platform.
+    # Production deployments should use a restricted Docker socket proxy instead.
+    user: "0:0"
     volumes:
       # The platform drives the Docker daemon to create the ticket sandboxes.
       # In production, prefer a socket proxy restricted to container operations over the raw socket.
       - /var/run/docker.sock:/var/run/docker.sock
-    # The image runs as uid 1000; it must belong to the group owning the socket.
-    group_add:
-      - ${DOCKER_GROUP_ID:-999}
 
 # Declared explicitly rather than relying on the implicit default network: it pins every service to
 # the same bridge whatever the project name, so a container left over from another compose project

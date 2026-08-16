@@ -1,6 +1,8 @@
 package com.company.aidev.api;
 
 import com.company.aidev.api.dto.CreateWorkflowRequest;
+import com.company.aidev.api.dto.CreateMessageWorkflowRequest;
+import com.company.aidev.api.dto.ClarifyWorkflowRequest;
 import com.company.aidev.api.dto.WorkflowDetailResponse;
 import com.company.aidev.api.dto.WorkflowResponse;
 import com.company.aidev.domain.AcceptanceReport;
@@ -11,6 +13,7 @@ import com.company.aidev.domain.TestReport;
 import com.company.aidev.domain.TicketAnalysis;
 import com.company.aidev.persistence.entity.WorkflowEntity;
 import com.company.aidev.persistence.repository.AgentExecutionRepository;
+import com.company.aidev.persistence.repository.ToolExecutionRepository;
 import com.company.aidev.persistence.repository.WorkflowStepRepository;
 import com.company.aidev.workflow.DevelopmentWorkflowService;
 import com.company.aidev.workflow.WorkflowArtifactCodec;
@@ -20,6 +23,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -39,22 +43,34 @@ public class WorkflowController {
     private final DevelopmentWorkflowService workflowService;
     private final WorkflowStepRepository stepRepository;
     private final AgentExecutionRepository agentExecutionRepository;
+    private final ToolExecutionRepository toolExecutionRepository;
     private final WorkflowArtifactCodec codec;
 
     public WorkflowController(
             DevelopmentWorkflowService workflowService,
             WorkflowStepRepository stepRepository,
             AgentExecutionRepository agentExecutionRepository,
+            ToolExecutionRepository toolExecutionRepository,
             WorkflowArtifactCodec codec) {
         this.workflowService = workflowService;
         this.stepRepository = stepRepository;
         this.agentExecutionRepository = agentExecutionRepository;
+        this.toolExecutionRepository = toolExecutionRepository;
         this.codec = codec;
     }
 
     @PostMapping
     public ResponseEntity<WorkflowResponse> create(@Valid @RequestBody CreateWorkflowRequest request) {
         WorkflowEntity workflow = workflowService.createOrGetActive(request.jiraTicket(), request.gitlabProjectId());
+        workflowService.startAsync(workflow.getId());
+        return ResponseEntity.created(URI.create("/api/workflows/" + workflow.getId()))
+                .body(WorkflowResponse.from(workflow));
+    }
+
+    /** Starts a workflow from a free-form development request, without requiring Jira. */
+    @PostMapping("/message")
+    public ResponseEntity<WorkflowResponse> createFromMessage(@Valid @RequestBody CreateMessageWorkflowRequest request) {
+        WorkflowEntity workflow = workflowService.createFromMessage(request.message(), request.gitlabProjectId());
         workflowService.startAsync(workflow.getId());
         return ResponseEntity.created(URI.create("/api/workflows/" + workflow.getId()))
                 .body(WorkflowResponse.from(workflow));
@@ -87,6 +103,21 @@ public class WorkflowController {
                                 step.getStartedAt()))
                         .toList();
 
+        Map<UUID, List<WorkflowDetailResponse.ToolExecutionView>> toolsByExecution =
+                toolExecutionRepository.findByWorkflowIdOrderByCreatedAtAsc(id).stream()
+                        .filter(tool -> tool.getAgentExecutionId() != null)
+                        .collect(Collectors.groupingBy(
+                                tool -> tool.getAgentExecutionId(),
+                                Collectors.mapping(
+                                        tool -> new WorkflowDetailResponse.ToolExecutionView(
+                                                tool.getToolName(),
+                                                tool.getArguments(),
+                                                tool.getResult(),
+                                                tool.isSuccessful(),
+                                                tool.getDurationMs(),
+                                                tool.getCreatedAt()),
+                                        Collectors.toList())));
+
         List<WorkflowDetailResponse.AgentExecutionView> executions =
                 agentExecutionRepository.findByWorkflowIdOrderByStartedAtAsc(id).stream()
                         .map(execution -> new WorkflowDetailResponse.AgentExecutionView(
@@ -96,7 +127,10 @@ public class WorkflowController {
                                 execution.getSuccessful(),
                                 execution.getDurationMs(),
                                 execution.getStartedAt(),
-                                execution.getError()))
+                                execution.getError(),
+                                execution.getRawOutput(),
+                                execution.getParsedOutput(),
+                                toolsByExecution.getOrDefault(execution.getId(), List.of())))
                         .toList();
 
         return new WorkflowDetailResponse(
@@ -114,6 +148,14 @@ public class WorkflowController {
     @PostMapping("/{id}/retry")
     public WorkflowResponse retry(@PathVariable UUID id) {
         WorkflowEntity workflow = workflowService.retry(id);
+        workflowService.startAsync(id);
+        return WorkflowResponse.from(workflow);
+    }
+
+    /** Stores the missing context and restarts analysis of a clarification-blocked workflow. */
+    @PostMapping("/{id}/clarification")
+    public WorkflowResponse clarify(@PathVariable UUID id, @Valid @RequestBody ClarifyWorkflowRequest request) {
+        WorkflowEntity workflow = workflowService.clarify(id, request.clarification());
         workflowService.startAsync(id);
         return WorkflowResponse.from(workflow);
     }

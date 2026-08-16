@@ -1,6 +1,6 @@
 package com.company.aidev.gitlab;
 
-import com.company.aidev.config.GitLabProperties;
+import com.company.aidev.config.RestClientConfig;
 import com.company.aidev.gitlab.model.CreateMergeRequestCommand;
 import com.company.aidev.gitlab.model.GitLabProject;
 import com.company.aidev.gitlab.model.MergeRequest;
@@ -9,6 +9,7 @@ import com.company.aidev.gitlab.model.PipelineJob;
 import com.company.aidev.gitlab.model.PipelineStatus;
 import com.company.aidev.gitlab.model.ScannerReport;
 import com.company.aidev.security.BranchPolicy;
+import com.company.aidev.settings.PlatformSettings;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -42,18 +43,15 @@ public class RestGitLabClient implements GitLabClient {
             ScannerReport.DEPENDENCY_SCANNING, "gl-dependency-scanning-report.json",
             ScannerReport.SECRET_DETECTION, "gl-secret-detection-report.json");
 
-    private final RestClient restClient;
-    private final GitLabProperties properties;
+    private final PlatformSettings settings;
     private final ObjectMapper objectMapper;
     private final BranchPolicy branchPolicy;
 
     public RestGitLabClient(
-            RestClient gitlabRestClient,
-            GitLabProperties properties,
+            PlatformSettings settings,
             ObjectMapper objectMapper,
             BranchPolicy branchPolicy) {
-        this.restClient = gitlabRestClient;
-        this.properties = properties;
+        this.settings = settings;
         this.objectMapper = objectMapper;
         this.branchPolicy = branchPolicy;
     }
@@ -68,7 +66,7 @@ public class RestGitLabClient implements GitLabClient {
                 node.path("id").asLong(),
                 node.path("name").asText(""),
                 node.path("path_with_namespace").asText(""),
-                node.path("default_branch").asText(properties.defaultTargetBranch()),
+                node.path("default_branch").asText(settings.gitlab().defaultTargetBranch()),
                 node.path("web_url").asText(""),
                 node.path("http_url_to_repo").asText(""));
     }
@@ -107,7 +105,7 @@ public class RestGitLabClient implements GitLabClient {
     @CircuitBreaker(name = "gitlab")
     public Optional<String> readFile(String projectId, String ref, String path) {
         try {
-            String content = restClient
+            String content = restClient()
                     .get()
                     .uri("/projects/" + encode(projectId) + "/repository/files/" + encode(path)
                             + "/raw?ref=" + encode(ref))
@@ -171,7 +169,7 @@ public class RestGitLabClient implements GitLabClient {
         }
 
         try {
-            JsonNode node = restClient
+            JsonNode node = restClient()
                     .post()
                     .uri("/projects/" + encode(command.projectId()) + "/merge_requests")
                     .body(payload)
@@ -260,7 +258,7 @@ public class RestGitLabClient implements GitLabClient {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("body", comment);
         try {
-            restClient
+            restClient()
                     .post()
                     .uri("/projects/" + encode(projectId) + "/merge_requests/" + mergeRequestIid + "/notes")
                     .body(payload)
@@ -317,7 +315,7 @@ public class RestGitLabClient implements GitLabClient {
     @CircuitBreaker(name = "gitlab")
     public String getJobLog(String projectId, long jobId, int maxChars) {
         try {
-            String trace = restClient
+            String trace = restClient()
                     .get()
                     .uri("/projects/" + encode(projectId) + "/jobs/" + jobId + "/trace")
                     .retrieve()
@@ -357,7 +355,7 @@ public class RestGitLabClient implements GitLabClient {
 
     private Optional<String> downloadArtifact(String projectId, long jobId, String artifactPath, int maxChars) {
         try {
-            byte[] content = restClient
+            byte[] content = restClient()
                     .get()
                     .uri("/projects/" + encode(projectId) + "/jobs/" + jobId + "/artifacts/" + artifactPath)
                     .retrieve()
@@ -379,7 +377,7 @@ public class RestGitLabClient implements GitLabClient {
 
     private Optional<JsonNode> get(String uri) {
         try {
-            return Optional.ofNullable(restClient.get().uri(uri).retrieve().body(JsonNode.class));
+            return Optional.ofNullable(restClient().get().uri(uri).retrieve().body(JsonNode.class));
         } catch (RestClientResponseException e) {
             if (e.getStatusCode().value() == 404) {
                 return Optional.empty();
@@ -401,6 +399,14 @@ public class RestGitLabClient implements GitLabClient {
                 node.path("sha").asText(""),
                 node.hasNonNull("has_conflicts") ? node.path("has_conflicts").asBoolean() : null,
                 node.path("detailed_merge_status").asText(null));
+    }
+
+    private RestClient restClient() {
+        try {
+            return RestClientConfig.gitlabRestClient(settings.gitlab());
+        } catch (IllegalStateException e) {
+            throw new GitLabException(e.getMessage(), e);
+        }
     }
 
     private static Pipeline mapPipeline(JsonNode node) {

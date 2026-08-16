@@ -1,6 +1,7 @@
 package com.company.aidev.api.dto;
 
 import com.company.aidev.persistence.entity.WorkflowEntity;
+import com.company.aidev.domain.BuildProfile;
 import com.company.aidev.workflow.WorkflowStatus;
 import java.time.Instant;
 import java.util.UUID;
@@ -9,7 +10,11 @@ import java.util.UUID;
 public record WorkflowResponse(
         UUID id,
         String jiraTicket,
+        String requestId,
+        String sourceMessage,
+        String humanClarification,
         String gitlabProject,
+        BuildProfile buildProfile,
         WorkflowStatus status,
         String branch,
         String baseBranch,
@@ -25,8 +30,12 @@ public record WorkflowResponse(
     public static WorkflowResponse from(WorkflowEntity entity) {
         return new WorkflowResponse(
                 entity.getId(),
-                entity.getJiraTicket(),
+                entity.isJiraBacked() ? entity.getJiraTicket() : null,
+                entity.isJiraBacked() ? null : entity.getJiraTicket(),
+                entity.getSourceMessage(),
+                entity.getHumanClarification(),
                 entity.getGitlabProject(),
+                entity.getBuildProfile(),
                 entity.getStatus(),
                 entity.getBranch(),
                 entity.getBaseBranch(),

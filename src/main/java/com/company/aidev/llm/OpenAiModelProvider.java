@@ -87,7 +87,7 @@ public class OpenAiModelProvider implements LlmModelProvider {
                 .apiKey(openai.apiKey())
                 .modelName(modelName)
                 .temperature(settings.temperature())
-                .maxTokens(settings.maxTokens())
+                .maxCompletionTokens(settings.maxTokens())
                 .timeout(openai.timeout())
                 .maxRetries(openai.maxRetries())
                 .logRequests(openai.logRequests())

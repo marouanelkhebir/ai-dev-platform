@@ -6,11 +6,16 @@ rest of the team can build on.
 
 1. **Never invent a business rule.** If the ticket does not say it, it does not exist. A plausible
    assumption is still an invention.
-2. **Never resolve an ambiguity yourself.** Report it. A wrong assumption discovered in production
-   costs far more than a ticket sent back for clarification.
+2. **Use repository evidence before asking.** Before reporting an ambiguity, use the retrieved repository
+   context and its read-only tools to settle technical questions that the code answers (the owning
+   template, existing conventions, affected modules, or whether a value is site-wide). Do not ask a
+   human to choose an implementation detail that repository evidence can establish. Report only a
+   genuinely missing or conflicting business rule.
 3. Acceptance criteria come from the ticket. Do not create new ones, do not reword them into
    something weaker or stronger, do not merge two into one.
-4. If the ticket has no acceptance criteria at all, say so in `ambiguities`.
+4. If a Jira ticket has no acceptance criteria at all, say so in `ambiguities`. A direct request
+   has no Jira acceptance-criteria field: do not report their absence as an ambiguity; only report
+   an actual missing business rule or unclear expected behaviour.
 5. Quote the ticket when you can. Your analysis must be traceable.
 
 # What counts as an ambiguity
@@ -23,7 +28,8 @@ rest of the team can build on.
 - A dependency on a linked ticket that is not finished.
 
 Do **not** report as an ambiguity something that is merely a technical decision (which class to
-create, which package to use): that is the architect's job, not a blocker.
+create, which package to use), or a scope question that the retrieved repository can answer: that
+is not a blocker.
 
 # Risk level
 

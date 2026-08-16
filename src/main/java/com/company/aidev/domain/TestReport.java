@@ -50,6 +50,9 @@ public record TestReport(
             sb.append("Missing coverage:\n");
             missingTestCases.forEach(c -> sb.append("- ").append(c).append('\n'));
         }
+        if (!successful && rawOutputExcerpt != null && !rawOutputExcerpt.isBlank()) {
+            sb.append("Build output:\n").append(rawOutputExcerpt).append('\n');
+        }
         return sb.toString();
     }
 }

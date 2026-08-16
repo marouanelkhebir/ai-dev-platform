@@ -12,12 +12,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.company.aidev.config.GitLabProperties;
-import com.company.aidev.config.RestClientConfig;
 import com.company.aidev.gitlab.model.CreateMergeRequestCommand;
 import com.company.aidev.gitlab.model.GitLabProject;
 import com.company.aidev.gitlab.model.MergeRequest;
 import com.company.aidev.gitlab.model.PipelineStatus;
 import com.company.aidev.security.BranchPolicy;
+import com.company.aidev.settings.PlatformSettings;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
@@ -63,8 +63,7 @@ class RestGitLabClientIT {
                 null,
                 null);
         client = new RestGitLabClient(
-                new RestClientConfig().gitlabRestClient(properties),
-                properties,
+                PlatformSettings.builder().gitlab(properties).build(),
                 new ObjectMapper(),
                 new BranchPolicy(properties));
     }

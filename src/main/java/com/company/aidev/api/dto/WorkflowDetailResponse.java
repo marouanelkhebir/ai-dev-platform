@@ -46,5 +46,17 @@ public record WorkflowDetailResponse(
             Boolean successful,
             Long durationMs,
             Instant startedAt,
-            String error) {}
+            String error,
+            String response,
+            String structuredResponse,
+            List<ToolExecutionView> tools) {}
+
+    /** A redacted tool invocation, including the command output produced in the sandbox. */
+    public record ToolExecutionView(
+            String name,
+            String arguments,
+            String output,
+            boolean successful,
+            Long durationMs,
+            Instant createdAt) {}
 }

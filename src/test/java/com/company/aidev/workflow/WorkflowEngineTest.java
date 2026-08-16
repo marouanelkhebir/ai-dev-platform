@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -133,6 +134,13 @@ class WorkflowEngineTest {
         workflow = new WorkflowEntity(UUID.randomUUID(), TICKET, PROJECT, "main");
         workflow.setBranch("ai/" + TICKET);
 
+        when(gitLabClient.getProject(PROJECT))
+                .thenReturn(new GitLabProject(
+                        1L, "customer-management", PROJECT, "main", "https://gitlab/x", "https://gitlab/x.git"));
+        when(rulesLoader.loadContext(eq(PROJECT), anyString()))
+                .thenReturn(new RepositoryContext(
+                        PROJECT, "main", List.of("pom.xml"), "readme", "<project/>", List.of(), RepositoryRules.empty()));
+
         when(stateStore.claim(any())).thenAnswer(invocation -> Optional.of(workflow));
         when(stateStore.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(stateStore.beginStep(any(), any()))
@@ -185,10 +193,48 @@ class WorkflowEngineTest {
     }
 
     @Test
+    @DisplayName("a direct request is analysed without reading or updating Jira")
+    void shouldRunDirectRequestWithoutJira() {
+        workflow.setSourceMessage("Suspend customer fees after a failed payment.");
+        givenPlannableRepository();
+        givenSuccessfulDevelopment();
+        when(jiraAnalystAgent.analyzeMessage(eq(workflow.getId()), eq(TICKET), anyString(), any(), isNull()))
+                .thenReturn(new TicketAnalysis(
+                        TICKET, "Suspend fees", List.of("Fees are suspended after a failed payment"), List.of(), List.of(),
+                        RiskLevel.LOW, "Suspend the affected customer fees."));
+
+        engine.advance(workflow.getId());
+
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.WAITING_PIPELINE);
+        verify(jiraClient, never()).getIssue(anyString());
+        verify(jiraClient, never()).addComment(anyString(), anyString());
+        verify(jiraClient, never()).transitionTo(anyString(), anyString());
+        verify(rulesLoader).loadContext(PROJECT, "main");
+        verify(jiraAnalystAgent).analyzeMessage(eq(workflow.getId()), eq(TICKET), anyString(), any(), isNull());
+    }
+
+    @Test
+    @DisplayName("a direct request without formal acceptance criteria is not blocked")
+    void shouldNotBlockDirectRequestWithoutAcceptanceCriteria() {
+        workflow.setSourceMessage("Change the public site title to Jean Brun Immobilier.");
+        givenPlannableRepository();
+        givenSuccessfulDevelopment();
+        when(jiraAnalystAgent.analyzeMessage(eq(workflow.getId()), eq(TICKET), anyString(), any(), isNull()))
+                .thenReturn(new TicketAnalysis(
+                        TICKET, "Change the public site title", List.of(), List.of(), List.of(), RiskLevel.LOW, null));
+
+        engine.advance(workflow.getId());
+
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.WAITING_PIPELINE);
+        verify(architectAgent).plan(any(), any(), any());
+        verify(jiraClient, never()).transitionTo(anyString(), anyString());
+    }
+
+    @Test
     @DisplayName("an ambiguous ticket stops the workflow and asks a human")
     void shouldStopOnAmbiguousTicket() {
         when(jiraClient.getIssue(TICKET)).thenReturn(jiraIssue());
-        when(jiraAnalystAgent.analyze(any(), any()))
+        when(jiraAnalystAgent.analyze(any(), any(), any(), isNull()))
                 .thenReturn(new TicketAnalysis(
                         TICKET,
                         "Suspend fees",
@@ -205,7 +251,7 @@ class WorkflowEngineTest {
         verify(jiraClient).addComment(eq(TICKET), anyString());
         // Nothing was built, nothing was pushed.
         verify(architectAgent, never()).plan(any(), any(), any());
-        verify(sandboxManager, never()).createSandbox(any(), anyString());
+        verify(sandboxManager, never()).createSandbox(any(), anyString(), any());
     }
 
     @Test
@@ -327,7 +373,7 @@ class WorkflowEngineTest {
     }
 
     @Test
-    @DisplayName("a rejected review sends the work back to the developer instead of opening the gate")
+    @DisplayName("a rejected review starts a fresh development budget instead of opening the gate")
     void shouldReturnToDevelopmentWhenReviewRejects() {
         givenAnalysableTicket();
         givenPlannableRepository();
@@ -344,20 +390,25 @@ class WorkflowEngineTest {
 
         givenPersistedAnalysis();
         workflow.setMergeRequestIid(42L);
+        // Simulate an implementation cycle which already consumed the configured two attempts.
+        workflow.incrementDevelopmentAttempts();
+        workflow.incrementDevelopmentAttempts();
         workflow.setStatus(WorkflowStatus.CODE_REVIEW);
         engine.advance(workflow.getId());
 
-        // The security review is never reached, and the developer is given the blocking finding.
+        // The security review is never reached, and the developer receives a fresh implementation
+        // budget together with the blocking finding.
         verify(securityAgent, never()).review(any(), anyInt(), any(), anyString(), any(), any());
         verify(developerAgent)
                 .implement(
                         any(),
                         any(),
-                        anyInt(),
+                        eq(1),
                         any(),
                         any(),
                         any(),
                         org.mockito.ArgumentMatchers.contains("NPE on null customer"));
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.WAITING_PIPELINE);
     }
 
     @Test
@@ -425,7 +476,7 @@ class WorkflowEngineTest {
 
     private void givenAnalysableTicket() {
         when(jiraClient.getIssue(TICKET)).thenReturn(jiraIssue());
-        when(jiraAnalystAgent.analyze(any(), any()))
+        when(jiraAnalystAgent.analyze(any(), any(), any(), isNull()))
                 .thenReturn(new TicketAnalysis(
                         TICKET,
                         "Suspend the active fee when the customer becomes fragile",
@@ -482,7 +533,7 @@ class WorkflowEngineTest {
                 workflow.getId(),
                 TICKET,
                 Instant.now());
-        when(sandboxManager.createSandbox(any(), eq(TICKET))).thenReturn(sandbox);
+        when(sandboxManager.createSandbox(any(), eq(TICKET), any())).thenReturn(sandbox);
         when(gitLabClient.branchExists(eq(PROJECT), anyString())).thenReturn(false);
     }
 

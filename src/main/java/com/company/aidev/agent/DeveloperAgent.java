@@ -1,6 +1,7 @@
 package com.company.aidev.agent;
 
 import com.company.aidev.domain.DevelopmentResult;
+import com.company.aidev.domain.BuildProfile;
 import com.company.aidev.domain.RepositoryRules;
 import com.company.aidev.domain.TechnicalPlan;
 import com.company.aidev.domain.TicketAnalysis;
@@ -12,6 +13,7 @@ import com.company.aidev.sandbox.SandboxManager;
 import com.company.aidev.tool.FileTools;
 import com.company.aidev.tool.GitTools;
 import com.company.aidev.tool.MavenTools;
+import com.company.aidev.tool.NpmTools;
 import com.company.aidev.tool.ToolContext;
 import com.company.aidev.tool.ToolExecutionRecorder;
 import java.util.List;
@@ -72,10 +74,14 @@ public class DeveloperAgent {
         AgentExecutionEntity execution = agentSupport.beginExecution(AgentType.DEVELOPER, workflowId, attempt);
         ToolContext toolContext = new ToolContext(workflowId, execution.getId(), sandbox);
 
-        List<Object> tools = List.of(
-                new FileTools(sandboxManager, toolRecorder, toolContext),
-                new MavenTools(sandboxManager, toolRecorder, toolContext),
-                new GitTools(gitOperations, toolRecorder, toolContext));
+        List<Object> tools = new java.util.ArrayList<>();
+        tools.add(new FileTools(sandboxManager, toolRecorder, toolContext));
+        if (BuildProfile.detect(sandboxManager, sandbox) == BuildProfile.ANGULAR) {
+            tools.add(new NpmTools(sandboxManager, toolRecorder, toolContext));
+        } else {
+            tools.add(new MavenTools(sandboxManager, toolRecorder, toolContext));
+        }
+        tools.add(new GitTools(gitOperations, toolRecorder, toolContext));
 
         String systemPrompt = promptLoader.load("developer");
         String userPrompt = buildUserPrompt(analysis, plan, rules, feedback, attempt);

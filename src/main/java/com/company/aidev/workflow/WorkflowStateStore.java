@@ -98,4 +98,11 @@ public class WorkflowStateStore {
         step.complete(to, successful, detail, error);
         stepRepository.save(step);
     }
+
+    /** Records a human-driven state change that did not execute an engine step. */
+    @Transactional
+    public void recordTransition(UUID workflowId, WorkflowStatus from, WorkflowStatus to, String detail) {
+        WorkflowStepEntity step = beginStep(workflowId, from);
+        completeStep(step, to, true, detail, null);
+    }
 }

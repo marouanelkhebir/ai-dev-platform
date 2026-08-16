@@ -1,6 +1,7 @@
 package com.company.aidev.sandbox;
 
 import com.company.aidev.config.SandboxProperties;
+import com.company.aidev.domain.BuildProfile;
 import com.company.aidev.observability.PlatformMetrics;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
@@ -75,7 +76,7 @@ public class DockerSandboxManager implements SandboxManager {
     }
 
     @Override
-    public Sandbox createSandbox(UUID workflowId, String jiraTicket) {
+    public Sandbox createSandbox(UUID workflowId, String jiraTicket, BuildProfile profile) {
         String workspacePath = properties.workspacePathFor(jiraTicket);
         String containerName = "aidev-" + sanitize(jiraTicket) + "-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -94,7 +95,7 @@ public class DockerSandboxManager implements SandboxManager {
                 .toList();
 
         try {
-            CreateContainerResponse container = client().createContainerCmd(properties.image())
+            CreateContainerResponse container = client().createContainerCmd(properties.imageFor(profile))
                     .withName(containerName)
                     .withHostConfig(hostConfig)
                     // Keep the container alive; every real command is an exec into it.
@@ -124,7 +125,8 @@ public class DockerSandboxManager implements SandboxManager {
             rawExecute(sandbox, List.of("mkdir", "-p", workspacePath), properties.workspaceRoot(), Duration.ofSeconds(30));
 
             log.info(
-                    "Sandbox created containerId={} name={} workspace={} ticket={}",
+                    "Sandbox created profile={} containerId={} name={} workspace={} ticket={}",
+                    profile,
                     shortId(container.getId()),
                     containerName,
                     workspacePath,

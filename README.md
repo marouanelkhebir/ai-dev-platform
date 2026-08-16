@@ -188,8 +188,9 @@ is the moment to introduce it.
 Prerequisites: JDK 21+, Maven 3.9+, Docker, and access to an OpenAI-compatible API.
 
 ```bash
-# 1. Build the sandbox image the tickets will be developed in
+# 1. Build the sandbox images used according to the detected repository type
 docker build -t ai-dev-sandbox:21 docker/sandbox
+docker build -t ai-dev-sandbox-angular:22 docker/sandbox-angular
 
 # 2. Configure
 cp .env.example .env
@@ -418,6 +419,16 @@ production deployment.
 Environment variables from your secret manager (Vault, GitLab CI/CD variables marked *masked* and
 *protected*, or Kubernetes secrets). Nothing in this repository reads a token from a file, and
 `.env` is gitignored.
+
+### Docker socket permissions
+
+The Compose service runs as root because Docker Desktop for macOS exposes
+`/var/run/docker.sock` as writable only by its owner. A supplementary group therefore cannot
+reliably grant the unprivileged application user access, and workflows would fail later with
+`Permission denied` while creating their sandbox.
+
+A raw Docker socket already grants host-equivalent container control. In production, use a
+restricted Docker socket proxy and run the platform with only the permissions it needs.
 
 ## 9. Security model
 

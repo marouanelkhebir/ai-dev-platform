@@ -87,6 +87,25 @@ class WorkflowApiIT {
     }
 
     @Test
+    @DisplayName("creates a workflow from a direct message without a Jira ticket")
+    void shouldCreateWorkflowFromMessage() throws Exception {
+        mockMvc.perform(post("/api/workflows/message")
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"Add an endpoint to suspend a customer fee.\","
+                                + "\"gitlabProjectId\":\"bank/customer-management\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.jiraTicket").isEmpty())
+                .andExpect(jsonPath("$.requestId").value(org.hamcrest.Matchers.startsWith("MSG-")))
+                .andExpect(jsonPath("$.sourceMessage").value("Add an endpoint to suspend a customer fee."))
+                .andExpect(jsonPath("$.branch").value(org.hamcrest.Matchers.startsWith("ai/message/MSG-")))
+                .andExpect(jsonPath("$.status").value(WorkflowStatus.CREATED.name()));
+
+        assertThat(workflowRepository.findAll()).hasSize(1);
+        assertThat(workflowRepository.findAll().get(0).isJiraBacked()).isFalse();
+    }
+
+    @Test
     @DisplayName("rejects an invalid Jira key instead of starting a workflow")
     void shouldRejectInvalidTicketKey() throws Exception {
         mockMvc.perform(post("/api/workflows")
@@ -146,6 +165,40 @@ class WorkflowApiIT {
         mockMvc.perform(post("/api/workflows/{id}/cancel", id).header("X-Api-Key", API_KEY))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(WorkflowStatus.CANCELLED.name()));
+    }
+
+    @Test
+    @DisplayName("stores a clarification and restarts analysis for a blocked workflow")
+    void shouldClarifyBlockedWorkflow() throws Exception {
+        var workflow = workflowRepository.save(new com.company.aidev.persistence.entity.WorkflowEntity(
+                UUID.randomUUID(), "BANK-1245", "bank/customer-management", "main"));
+        workflow.setStatus(WorkflowStatus.NEEDS_CLARIFICATION);
+        workflowRepository.save(workflow);
+
+        mockMvc.perform(post("/api/workflows/{id}/clarification", workflow.getId())
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clarification\":\"The page title must be Jean Brun Immobilier.\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value(WorkflowStatus.ANALYZING_JIRA.name()))
+                .andExpect(jsonPath("$.humanClarification").value("The page title must be Jean Brun Immobilier."));
+
+        var saved = workflowRepository.findById(workflow.getId()).orElseThrow();
+        assertThat(saved.getStatus()).isEqualTo(WorkflowStatus.ANALYZING_JIRA);
+        assertThat(saved.getHumanClarification()).isEqualTo("The page title must be Jean Brun Immobilier.");
+    }
+
+    @Test
+    @DisplayName("refuses clarification for a workflow that is not blocked")
+    void shouldRefuseClarificationForRunningWorkflow() throws Exception {
+        var workflow = workflowRepository.save(new com.company.aidev.persistence.entity.WorkflowEntity(
+                UUID.randomUUID(), "BANK-1245", "bank/customer-management", "main"));
+
+        mockMvc.perform(post("/api/workflows/{id}/clarification", workflow.getId())
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"clarification\":\"A useful detail.\"}"))
+                .andExpect(status().isConflict());
     }
 
     @Test

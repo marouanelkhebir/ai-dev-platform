@@ -1,5 +1,6 @@
 package com.company.aidev.config;
 
+import com.company.aidev.domain.BuildProfile;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record SandboxProperties(
         String dockerHost,
         String image,
+        String angularImage,
         String workspaceRoot,
         Long memoryLimitBytes,
         Long cpuQuota,
@@ -30,6 +32,7 @@ public record SandboxProperties(
     public SandboxProperties {
         dockerHost = blankTo(dockerHost, "unix:///var/run/docker.sock");
         image = blankTo(image, "ai-dev-sandbox:21");
+        angularImage = blankTo(angularImage, "ai-dev-sandbox-angular:22");
         workspaceRoot = blankTo(workspaceRoot, "/workspaces");
         memoryLimitBytes = memoryLimitBytes == null ? 4L * 1024 * 1024 * 1024 : memoryLimitBytes;
         cpuQuota = cpuQuota == null ? 200_000L : cpuQuota; // 2 CPUs with the default 100ms period
@@ -43,6 +46,15 @@ public record SandboxProperties(
                 ? List.of("git", "mvn", "./mvnw", "mvnw", "java", "ls", "cat", "grep", "find", "test", "npm", "node")
                 : List.copyOf(allowedExecutables);
         environment = environment == null ? Map.of() : Map.copyOf(environment);
+    }
+
+    /** Resolves a fixed, administrator-configured image; agents never choose container images. */
+    public String imageFor(BuildProfile profile) {
+        return switch (profile) {
+            case MAVEN -> image;
+            case ANGULAR -> angularImage;
+            case UNSUPPORTED -> throw new IllegalArgumentException("Unsupported repository build profile");
+        };
     }
 
     private static String blankTo(String value, String fallback) {
