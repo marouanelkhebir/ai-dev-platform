@@ -35,6 +35,7 @@ import com.company.aidev.domain.RepositoryRules;
 import com.company.aidev.domain.ReviewDecision;
 import com.company.aidev.domain.ReviewFinding;
 import com.company.aidev.domain.RiskLevel;
+import com.company.aidev.domain.SecurityFinding;
 import com.company.aidev.domain.SecurityReport;
 import com.company.aidev.domain.Severity;
 import com.company.aidev.domain.TechnicalPlan;
@@ -332,6 +333,12 @@ class WorkflowEngineTest {
                                 Severity.CRITICAL, "Fee.java", 12, "correctness", "NPE on null customer", "guard it")),
                         "not ready"));
 
+        when(acceptanceAgent.verify(any(), anyInt(), any(), anyString(), any()))
+                .thenReturn(new AcceptanceReport(
+                        List.of(new AcceptanceCriterionResult(
+                                "AC1", AcceptanceStatus.PASS, List.of("FeeTest#shouldSuspend"), null)),
+                        "covered"));
+
         givenPersistedAnalysis();
         workflow.setMergeRequestIid(42L);
         // Simulate an implementation cycle which already consumed the configured two attempts.
@@ -340,9 +347,7 @@ class WorkflowEngineTest {
         workflow.setStatus(WorkflowStatus.CODE_REVIEW);
         engine.advance(workflow.getId());
 
-        // The security review is never reached, and the developer receives a fresh implementation
-        // budget together with the blocking finding.
-        verify(securityAgent, never()).review(any(), anyInt(), any(), anyString(), any(), any());
+        // The developer receives a fresh implementation budget together with the blocking finding.
         verify(developerAgent)
                 .implement(
                         any(),
@@ -352,7 +357,61 @@ class WorkflowEngineTest {
                         any(),
                         any(),
                         org.mockito.ArgumentMatchers.contains("NPE on null customer"));
-        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.DONE);
+    }
+
+    @Test
+    @DisplayName("a blocking security finding sends the work back and nothing is pushed")
+    void shouldNotPushWhenSecurityReviewRejects() {
+        givenAnalysableTicket();
+        givenPlannableRepository();
+        givenSuccessfulDevelopment();
+        when(securityAgent.review(any(), anyInt(), any(), anyString(), any(), any()))
+                .thenReturn(new SecurityReport(
+                        ReviewDecision.REQUEST_CHANGES,
+                        List.of(new SecurityFinding(
+                                Severity.BLOCKER,
+                                "secret",
+                                "Fee.java",
+                                7,
+                                "An API token is hardcoded",
+                                "read it from configuration",
+                                "agent",
+                                false)),
+                        "not shippable"));
+
+        engine.advance(workflow.getId());
+
+        // The gate is before the push: the remote never sees the branch, and the developer is asked
+        // to fix the finding.
+        verify(gitOperations, never()).push(any(), anyString());
+        verify(gitLabClient, never()).createMergeRequest(any());
+        verify(developerAgent, org.mockito.Mockito.atLeastOnce())
+                .implement(
+                        any(),
+                        any(),
+                        anyInt(),
+                        any(),
+                        any(),
+                        any(),
+                        org.mockito.ArgumentMatchers.contains("An API token is hardcoded"));
+        // maxReviewAttempts is 2 in this test: the loop is bounded and hands the ticket to a human.
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.FAILED);
+    }
+
+    @Test
+    @DisplayName("the security review reads the sandbox diff, before the branch exists on the remote")
+    void shouldReviewSecurityFromTheSandboxBeforePush() {
+        givenAnalysableTicket();
+        givenPlannableRepository();
+        givenSuccessfulDevelopment();
+
+        engine.advance(workflow.getId());
+
+        var order = org.mockito.Mockito.inOrder(securityAgent, gitOperations);
+        order.verify(securityAgent).review(any(), anyInt(), any(), anyString(), any(), any());
+        order.verify(gitOperations).push(any(), eq("ai/" + TICKET));
+        verify(gitOperations).diffAgainstBase(any(), eq("main"), anyInt());
+        verify(gitLabClient, never()).getMergeRequestDiff(anyString(), anyLong(), anyInt());
     }
 
     @Test
@@ -481,7 +540,9 @@ class WorkflowEngineTest {
         when(gitLabClient.branchExists(eq(PROJECT), anyString())).thenReturn(false);
     }
 
+    /** Everything needed to reach the remote: the security gate opens, then the branch is pushed. */
     private void givenPushableRepository() {
+        givenApprovingSecurityReview();
         when(gitOperations.commitAll(any(), anyString())).thenReturn(true);
         when(gitOperations.currentCommitSha(any())).thenReturn("abc123");
         givenMergeRequest();
@@ -494,6 +555,14 @@ class WorkflowEngineTest {
         when(testAgent.runAndAnalyse(any(), any(), anyInt(), any(), any()))
                 .thenReturn(new TestReport(true, 12, 0, 0, List.of(), List.of(), ""));
         givenPushableRepository();
+    }
+
+    /** The security gate stands between the tests and the push, so the happy path must clear it. */
+    private void givenApprovingSecurityReview() {
+        when(gitOperations.diffAgainstBase(any(), anyString(), anyInt()))
+                .thenReturn("--- a/Fee.java\n+++ b/Fee.java\n+ suspend();");
+        when(securityAgent.review(any(), anyInt(), any(), anyString(), any(), any()))
+                .thenReturn(new SecurityReport(ReviewDecision.APPROVE, List.of(), "no security issue"));
     }
 
     private void givenMergeRequest() {

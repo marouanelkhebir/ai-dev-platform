@@ -49,30 +49,23 @@ DEVELOP  ◄──────────────────────�
 LOCAL_TESTS ──fail──────────────────┤
   │                                 │
   ▼                                 │
-PUSH → CREATE_MR                    │
-  │                                 │
-  ▼                                 │
-WAIT_GITLAB_PIPELINE ──fail─────────┤
-  │                                 │
-  ▼                                 │
-CODE_REVIEW ──REQUEST_CHANGES───────┤
-  │                                 │
-  ▼                                 │
-SECURITY_REVIEW ──REQUEST_CHANGES───┤
-  │                                 │
-  ▼                                 │
-ACCEPTANCE ──not covered────────────┘
+SECURITY_REVIEW ──REQUEST_CHANGES───┘
+  │       (nothing is pushed until this gate approves)
+  ▼
+PUSH → CREATE_MR
   │
   ▼
-WAIT_HUMAN_APPROVAL
-  │
-  ▼
-DONE   (a human merges, manually)
+DONE   (a human reviews and merges, manually)
 ```
 
-Each of the three loops is bounded (3 attempts by default). When a budget is exhausted the ticket
-moves to `AI_FAILED` with the merge request left open and a full report attached, so a human can
-finish the work instead of starting over.
+Both loops are bounded (3 attempts by default). When a budget is exhausted the ticket moves to
+`AI_FAILED` with the work left in place and a report attached, so a human can finish it instead of
+starting over.
+
+The `CODE_REVIEW`, `ACCEPTANCE` and `WAITING_HUMAN_APPROVAL` states exist in `WorkflowStatus` and
+their steps are implemented in the engine, but **the current version never transitions into them**:
+`CREATING_MERGE_REQUEST` goes straight to `DONE`. The reviewer and acceptance agents therefore do
+not run on a real ticket yet.
 
 ## 2. Architecture
 

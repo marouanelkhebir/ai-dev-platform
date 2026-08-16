@@ -110,6 +110,28 @@ public class GitOperations {
         return diff;
     }
 
+    /**
+     * Unified diff of everything the branch changes compared to the base branch, including the work
+     * that is still uncommitted.
+     *
+     * <p>Unlike {@link #diff(Sandbox, int)}, which only shows the current round, this is what a
+     * reviewer needs before the branch is pushed: the complete change, even when a previous round
+     * already committed part of it.
+     */
+    public String diffAgainstBase(Sandbox sandbox, String baseBranch, int maxChars) {
+        CommandResult result = run(
+                sandbox,
+                List.of("git", "diff", "origin/" + baseBranch, "--unified=3"),
+                sandbox.repositoryPath(),
+                QUICK_TIMEOUT);
+        assertSuccess(result, "git diff origin/" + baseBranch);
+        String diff = result.stdout();
+        if (diff.length() > maxChars) {
+            return diff.substring(0, maxChars) + "\n...[diff truncated]";
+        }
+        return diff;
+    }
+
     /** Stages everything and commits. Returns false when there was nothing to commit. */
     public boolean commitAll(Sandbox sandbox, String message) {
         CommandResult add = run(sandbox, List.of("git", "add", "-A"), sandbox.repositoryPath(), QUICK_TIMEOUT);

@@ -80,7 +80,10 @@ public class ReviewerAgent {
                 RepositoryRules.CODING_GUIDELINES,
                 RepositoryRules.DOMAIN,
                 RepositoryRules.TESTING_GUIDELINES);
-        return rendered.isBlank() ? "(the repository does not define .ai rules; apply standard Spring Boot practices)" : rendered;
+        return rendered.isBlank()
+                ? "(the repository does not define .ai rules; infer the stack from the diff and apply its standard practices"
+                        + " together with the conventions visible in the surrounding code)"
+                : rendered;
     }
 
     private static String numbered(List<String> items) {

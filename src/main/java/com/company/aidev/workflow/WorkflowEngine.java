@@ -365,7 +365,8 @@ public class WorkflowEngine {
                     : report.failedTests() + " test(s) failing, retrying";
             return StepOutcome.to(WorkflowStatus.DEVELOPING, detail);
         }
-        return StepOutcome.to(WorkflowStatus.PUSHING, report.totalTests() + " test(s) passing");
+        // Nothing leaves the sandbox before the security review has seen it.
+        return StepOutcome.to(WorkflowStatus.SECURITY_REVIEW, report.totalTests() + " test(s) passing");
     }
 
     private StepOutcome push(WorkflowRun run) {
@@ -456,10 +457,25 @@ public class WorkflowEngine {
         return StepOutcome.to(WorkflowStatus.SECURITY_REVIEW, "Code review approved");
     }
 
+    /**
+     * Reviews the change for security issues.
+     *
+     * <p>Runs <em>before</em> the push on a branch that has no merge request yet: the diff is then
+     * read from the sandbox, and a blocking finding sends the work back to the developer without
+     * anything ever reaching the remote. Once a merge request exists (a later round), the diff comes
+     * from GitLab and the review feeds the acceptance step instead.
+     */
     private StepOutcome securityReview(WorkflowRun run) {
         WorkflowEntity workflow = run.workflow();
         TicketAnalysis analysis = requireAnalysis(workflow);
-        String diff = currentDiff(workflow);
+        boolean beforePush = workflow.getMergeRequestIid() == null;
+        String diff = beforePush ? sandboxDiff(run) : currentDiff(workflow);
+
+        if (beforePush && diff.isBlank()) {
+            // Nothing was changed: the push step is the one that reports it, and there is nothing to
+            // review. Burning an LLM call on an empty diff would only add noise to the audit trail.
+            return StepOutcome.to(WorkflowStatus.PUSHING, "No change to review");
+        }
 
         var scannerReports = workflow.getPipelineId() == null
                 ? List.<com.company.aidev.gitlab.model.ScannerReport>of()
@@ -480,7 +496,9 @@ public class WorkflowEngine {
             metrics.reviewRejected(workflow.getGitlabProject(), "security");
             return requestChanges(workflow, report.toFeedback(), "Security review requested changes");
         }
-        return StepOutcome.to(WorkflowStatus.ACCEPTANCE, "Security review approved");
+        return beforePush
+                ? StepOutcome.to(WorkflowStatus.PUSHING, "Security review approved before push")
+                : StepOutcome.to(WorkflowStatus.ACCEPTANCE, "Security review approved");
     }
 
     private StepOutcome acceptance(WorkflowRun run) {
@@ -565,6 +583,13 @@ public class WorkflowEngine {
             // Losing the report must not lose the work: the merge request already exists.
             log.warn("Unable to publish the final report on merge request !{}: {}", workflow.getMergeRequestIid(), e.toString());
         }
+    }
+
+    /** Full diff of the branch against its base, read from the sandbox before anything is pushed. */
+    private String sandboxDiff(WorkflowRun run) {
+        ensureSandbox(run);
+        return gitOperations.diffAgainstBase(
+                run.sandbox(), run.workflow().getBaseBranch(), MAX_DIFF_CHARS);
     }
 
     private String currentDiff(WorkflowEntity workflow) {
