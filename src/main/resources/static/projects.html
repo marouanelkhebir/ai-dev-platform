@@ -95,14 +95,14 @@
         <aside class="rail-note"><strong>Archiver plutôt que supprimer</strong>Un projet archivé ne démarre plus de workflow mais garde tout son historique. La suppression n’est possible qu’à zéro workflow.</aside>
       </nav>
       <main class="content">
-        <div class="page-heading"><div><h1>Projets</h1><p class="intro">Un projet porte son dépôt GitLab, sa clé Jira, son image Docker et sa configuration d’exécution. Chaque workflow en hérite.</p></div><button id="newProject">Nouveau projet</button></div>
+        <div class="page-heading"><div><h1>Projets</h1><p class="intro">Un projet porte son dépôt GitLab ou Bitbucket, sa clé Jira, son image Docker et sa configuration d’exécution. Chaque workflow en hérite.</p></div><button id="newProject">Nouveau projet</button></div>
         <div class="toolbar">
           <input id="search" type="search" placeholder="Rechercher un nom, un dépôt, une clé Jira" aria-label="Rechercher">
           <label><input type="checkbox" id="activeOnly"> Actifs seulement</label>
           <button class="secondary" id="refresh">Actualiser</button>
         </div>
         <section class="panel">
-          <div class="row row-head"><span>Projet</span><span>Dépôt GitLab</span><span>Jira</span><span>Image</span><span>Workflows</span><span>Statut</span></div>
+          <div class="row row-head"><span>Projet</span><span>Dépôt</span><span>Jira</span><span>Image</span><span>Workflows</span><span>Statut</span></div>
           <div id="projectList"></div>
         </section>
       </main>
@@ -114,7 +114,8 @@
       <h2 id="dialogTitle">Nouveau projet</h2>
       <div class="grid2">
         <div class="field"><label for="f-name">Nom</label><input id="f-name" required maxlength="128" placeholder="Banque — gestion client"><small>Unique sur la plateforme</small></div>
-        <div class="field"><label for="f-gitlab">Dépôt GitLab</label><input id="f-gitlab" required placeholder="bank/customer-management"><small>Chemin ou identifiant numérique</small></div>
+        <div class="field"><label for="f-provider">Fournisseur du dépôt</label><select id="f-provider"><option value="GITLAB">GitLab</option><option value="BITBUCKET">Bitbucket</option></select><small>Le fournisseur utilisé par ce projet</small></div>
+        <div class="field"><label for="f-gitlab" id="repositoryLabel">Dépôt GitLab</label><input id="f-gitlab" required placeholder="bank/customer-management"><small id="repositoryHelp">Chemin ou identifiant numérique</small></div>
         <div class="field"><label for="f-jira">Clé Jira</label><input id="f-jira" placeholder="BANK" maxlength="32"><small>Vide : le projet n’accepte que des demandes libres</small></div>
         <div class="field"><label for="f-image">Image Docker</label><input id="f-image" placeholder="registry.example.com/team/image@sha256:…"><small>Vide : image globale du profil détecté</small></div>
         <div class="field"><label for="f-branch">Branche cible</label><input id="f-branch" placeholder="main"><small>Vide : branche par défaut du dépôt</small></div>
@@ -132,7 +133,7 @@
       <p class="intro" id="cloneSource"></p>
       <div class="field"><label for="c-name">Nom du clone</label><input id="c-name" required maxlength="128"></div>
       <div class="grid2">
-        <div class="field"><label for="c-gitlab">Dépôt GitLab</label><input id="c-gitlab" placeholder="identique à la source"></div>
+        <div class="field"><label for="c-gitlab">Dépôt</label><input id="c-gitlab" placeholder="identique à la source"></div>
         <div class="field"><label for="c-jira">Clé Jira</label><input id="c-jira" placeholder="identique à la source"></div>
       </div>
       <div class="field"><label for="c-image">Image Docker</label><input id="c-image" placeholder="identique à la source"></div>
@@ -196,6 +197,7 @@
 
     function openCreate() {
       $('#projectForm').reset();
+      updateRepositoryCopy();
       $('#dialogMessage').textContent = '';
       $('#projectDialog').showModal();
     }
@@ -210,6 +212,7 @@
         await request('/api/projects', { method:'POST', body: JSON.stringify({
           name: $('#f-name').value.trim(),
           description: $('#f-description').value.trim() || null,
+          scmProvider: $('#f-provider').value,
           gitlabProject: $('#f-gitlab').value.trim(),
           jiraProjectKey: $('#f-jira').value.trim() || null,
           dockerImage: $('#f-image').value.trim() || null,
@@ -267,6 +270,13 @@
     });
 
     $('#newProject').addEventListener('click', openCreate);
+    function updateRepositoryCopy() {
+      const bitbucket = $('#f-provider').value === 'BITBUCKET';
+      $('#repositoryLabel').textContent = bitbucket ? 'Dépôt Bitbucket' : 'Dépôt GitLab';
+      $('#f-gitlab').placeholder = bitbucket ? 'workspace/repository' : 'bank/customer-management';
+      $('#repositoryHelp').textContent = bitbucket ? 'Format : espace-de-travail/dépôt' : 'Chemin ou identifiant numérique';
+    }
+    $('#f-provider').addEventListener('change', updateRepositoryCopy);
     $('#cancelDialog').addEventListener('click', () => $('#projectDialog').close());
     $('#cancelClone').addEventListener('click', () => $('#cloneDialog').close());
     $('#refresh').addEventListener('click', load);

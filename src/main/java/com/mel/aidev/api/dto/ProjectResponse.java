@@ -1,6 +1,8 @@
 package com.mel.aidev.api.dto;
 
 import com.mel.aidev.persistence.entity.ProjectEntity;
+import com.mel.aidev.gitlab.ScmProjectId;
+import com.mel.aidev.project.ScmProvider;
 import com.mel.aidev.workflow.WorkflowStatus;
 import java.time.Instant;
 import java.util.UUID;
@@ -10,6 +12,7 @@ public record ProjectResponse(
         UUID id,
         String name,
         String description,
+        ScmProvider scmProvider,
         String gitlabProject,
         String jiraProjectKey,
         String dockerImage,
@@ -28,7 +31,8 @@ public record ProjectResponse(
                 entity.getId(),
                 entity.getName(),
                 entity.getDescription(),
-                entity.getGitlabProject(),
+                entity.getScmProvider(),
+                ScmProjectId.repository(entity.getGitlabProject()),
                 entity.getJiraProjectKey(),
                 entity.getDockerImage(),
                 entity.getDefaultBranch(),

@@ -12,7 +12,8 @@ import java.util.Map;
  *
  * @param name unique display name
  * @param description free text, optional
- * @param gitlabProject GitLab path or numeric id
+ * @param scmProvider source-control provider
+ * @param gitlabProject repository path
  * @param jiraProjectKey Jira key, null for a project driven only by free-form requests
  * @param dockerImage pinned image, null to use the global per-profile image
  * @param defaultBranch target branch, null to use the default branch reported by GitLab
@@ -29,6 +30,7 @@ import java.util.Map;
 public record ProjectDefinition(
         String name,
         String description,
+        ScmProvider scmProvider,
         String gitlabProject,
         String jiraProjectKey,
         String dockerImage,
@@ -44,11 +46,22 @@ public record ProjectDefinition(
         Boolean active) {
 
     public ProjectDefinition {
+        scmProvider = scmProvider == null ? ScmProvider.GITLAB : scmProvider;
         protectedBranches = protectedBranches == null ? List.of() : List.copyOf(protectedBranches);
         buildCommand = buildCommand == null ? List.of() : List.copyOf(buildCommand);
         testCommand = testCommand == null ? List.of() : List.copyOf(testCommand);
         lintCommand = lintCommand == null ? List.of() : List.copyOf(lintCommand);
         variables = variables == null ? Map.of() : Map.copyOf(variables);
         models = models == null ? Map.of() : Map.copyOf(models);
+    }
+
+    /** Compatibility constructor for callers compiled against the GitLab-only project contract. */
+    public ProjectDefinition(
+            String name, String description, String gitlabProject, String jiraProjectKey, String dockerImage,
+            String defaultBranch, String branchPrefix, List<String> protectedBranches, List<String> buildCommand,
+            List<String> testCommand, List<String> lintCommand, Integer retentionDays, Map<String, String> variables,
+            Map<ModelRole, String> models, Boolean active) {
+        this(name, description, ScmProvider.GITLAB, gitlabProject, jiraProjectKey, dockerImage, defaultBranch, branchPrefix,
+                protectedBranches, buildCommand, testCommand, lintCommand, retentionDays, variables, models, active);
     }
 }

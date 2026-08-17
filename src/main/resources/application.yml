@@ -157,6 +157,16 @@ gitlab:
     timeout: PT60M
     poll-interval: PT2M
 
+# ----------------------------------------------------------------- Bitbucket
+# Bitbucket Cloud workspace/repository paths are selected per project. Leave credentials empty
+# when no Bitbucket project is configured.
+bitbucket:
+  base-url: ${BITBUCKET_BASE_URL:https://api.bitbucket.org}
+  username: ${BITBUCKET_USERNAME:}
+  api-token: ${BITBUCKET_API_TOKEN:}
+  connect-timeout: PT5S
+  read-timeout: PT30S
+
 # ------------------------------------------------------------------- Sandbox
 sandbox:
   docker-host: ${DOCKER_HOST:unix:///var/run/docker.sock}

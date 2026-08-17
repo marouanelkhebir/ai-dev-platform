@@ -2,6 +2,7 @@ package com.mel.aidev.project;
 
 import com.mel.aidev.gitlab.GitLabClient;
 import com.mel.aidev.gitlab.GitLabException;
+import com.mel.aidev.gitlab.ScmProjectId;
 import com.mel.aidev.jira.JiraClient;
 import com.mel.aidev.jira.JiraException;
 import com.mel.aidev.llm.ModelRole;
@@ -74,14 +75,21 @@ public class ProjectValidator {
      * @return the default branch reported by GitLab, or null when it reports none
      */
     public String validateGitLabProject(String gitlabProject) {
-        if (gitlabProject == null || gitlabProject.isBlank()) {
-            throw new ProjectValidationException("The GitLab repository is required");
+        return validateRepository(ScmProvider.GITLAB, gitlabProject);
+    }
+
+    /** Checks access to a repository using the provider selected by the project. */
+    public String validateRepository(ScmProvider provider, String repository) {
+        ScmProvider effectiveProvider = provider == null ? ScmProvider.GITLAB : provider;
+        String projectId = effectiveProvider == ScmProvider.BITBUCKET ? ScmProjectId.bitbucket(repository) : repository;
+        if (repository == null || repository.isBlank()) {
+            throw new ProjectValidationException("The " + effectiveProvider + " repository is required");
         }
         try {
-            return gitLabClient.getProject(gitlabProject.trim()).defaultBranch();
+            return gitLabClient.getProject(projectId.trim()).defaultBranch();
         } catch (GitLabException e) {
             throw new ProjectValidationException(
-                    "The GitLab repository '" + gitlabProject + "' is not reachable with the current configuration",
+                    "The " + effectiveProvider + " repository '" + repository + "' is not reachable with the current configuration",
                     List.of(String.valueOf(e.getMessage())));
         }
     }

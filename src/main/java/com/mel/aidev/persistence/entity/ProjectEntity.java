@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import com.mel.aidev.project.ScmProvider;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -28,6 +29,10 @@ public class ProjectEntity {
 
     @Column(name = "description", columnDefinition = "text")
     private String description;
+
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(name = "scm_provider", nullable = false, length = 16)
+    private ScmProvider scmProvider = ScmProvider.GITLAB;
 
     @Column(name = "gitlab_project", nullable = false, length = 512)
     private String gitlabProject;
@@ -141,6 +146,10 @@ public class ProjectEntity {
     public String getGitlabProject() {
         return gitlabProject;
     }
+
+    public ScmProvider getScmProvider() { return scmProvider; }
+
+    public void setScmProvider(ScmProvider scmProvider) { this.scmProvider = scmProvider == null ? ScmProvider.GITLAB : scmProvider; }
 
     public void setGitlabProject(String gitlabProject) {
         this.gitlabProject = gitlabProject;

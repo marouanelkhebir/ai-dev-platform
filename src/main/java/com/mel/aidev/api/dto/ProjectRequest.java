@@ -2,6 +2,7 @@ package com.mel.aidev.api.dto;
 
 import com.mel.aidev.llm.ModelRole;
 import com.mel.aidev.project.ProjectDefinition;
+import com.mel.aidev.project.ScmProvider;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.util.List;
@@ -15,7 +16,8 @@ import java.util.Map;
  * field, and the screen sends the whole form anyway.
  *
  * @param name unique display name
- * @param gitlabProject GitLab path or numeric id, e.g. {@code bank/customer-management}
+ * @param scmProvider source-control provider; omitted values keep GitLab for backward compatibility
+ * @param gitlabProject repository path (GitLab group/project or Bitbucket workspace/repository)
  * @param jiraProjectKey Jira key, e.g. {@code BANK}; null for a project driven by free-form requests
  * @param dockerImage pinned image; null to use the global per-profile image
  * @param defaultBranch target branch; null to follow the default branch of the repository
@@ -32,6 +34,7 @@ import java.util.Map;
 public record ProjectRequest(
         @NotBlank @Size(max = 128) String name,
         @Size(max = 2000) String description,
+        ScmProvider scmProvider,
         @NotBlank @Size(max = 512) String gitlabProject,
         @Size(max = 32) String jiraProjectKey,
         @Size(max = 512) String dockerImage,
@@ -50,6 +53,7 @@ public record ProjectRequest(
         return new ProjectDefinition(
                 name,
                 description,
+                scmProvider,
                 gitlabProject,
                 jiraProjectKey,
                 dockerImage,

@@ -1,6 +1,8 @@
 package com.mel.aidev.git;
 
 import com.mel.aidev.config.GitLabProperties;
+import com.mel.aidev.config.BitbucketProperties;
+import com.mel.aidev.gitlab.ScmProjectId;
 import com.mel.aidev.gitlab.model.GitLabProject;
 import com.mel.aidev.sandbox.CommandResult;
 import com.mel.aidev.sandbox.Sandbox;
@@ -12,6 +14,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -38,11 +41,14 @@ public class GitOperations {
 
     private final SandboxManager sandboxManager;
     private final GitLabProperties properties;
+    private final BitbucketProperties bitbucketProperties;
     private final BranchPolicy branchPolicy;
+    private final Map<String, Boolean> bitbucketSandboxes = new ConcurrentHashMap<>();
 
-    public GitOperations(SandboxManager sandboxManager, GitLabProperties properties, BranchPolicy branchPolicy) {
+    public GitOperations(SandboxManager sandboxManager, GitLabProperties properties, BitbucketProperties bitbucketProperties, BranchPolicy branchPolicy) {
         this.sandboxManager = sandboxManager;
         this.properties = properties;
+        this.bitbucketProperties = bitbucketProperties;
         this.branchPolicy = branchPolicy;
     }
 
@@ -53,6 +59,7 @@ public class GitOperations {
      * against the base branch to work.
      */
     public void cloneRepository(Sandbox sandbox, GitLabProject project, String baseBranch) {
+        bitbucketSandboxes.put(sandbox.workspacePath(), ScmProjectId.isBitbucket(project.pathWithNamespace()));
         String cloneUrl = project.httpUrlToRepo();
         if (cloneUrl == null || cloneUrl.isBlank()) {
             cloneUrl = properties.rootUrl() + "/" + project.pathWithNamespace() + ".git";
@@ -184,7 +191,7 @@ public class GitOperations {
 
     private CommandResult run(
             Sandbox sandbox, List<String> command, String workingDir, Duration timeout, Map<String, String> extraEnv) {
-        Map<String, String> environment = new LinkedHashMap<>(authenticationEnvironment());
+        Map<String, String> environment = new LinkedHashMap<>(authenticationEnvironment(sandbox));
         environment.putAll(extraEnv);
         return sandboxManager.execute(sandbox, command, workingDir, timeout, environment);
     }
@@ -195,7 +202,19 @@ public class GitOperations {
      * <p>{@code GIT_TERMINAL_PROMPT=0} matters: without it a rejected token turns into a blocking
      * prompt and the command hangs until the sandbox timeout fires.
      */
-    private Map<String, String> authenticationEnvironment() {
+    private Map<String, String> authenticationEnvironment(Sandbox sandbox) {
+        if (Boolean.TRUE.equals(bitbucketSandboxes.get(sandbox.workspacePath()))) {
+            if (!bitbucketProperties.isConfigured()) {
+                throw new IllegalStateException("Bitbucket is not configured: set BITBUCKET_USERNAME and BITBUCKET_API_TOKEN");
+            }
+            String basic = Base64.getEncoder().encodeToString(
+                    (bitbucketProperties.username() + ":" + bitbucketProperties.apiToken()).getBytes(StandardCharsets.UTF_8));
+            return Map.of(
+                    "GIT_TERMINAL_PROMPT", "0",
+                    "GIT_CONFIG_COUNT", "1",
+                    "GIT_CONFIG_KEY_0", "http.extraHeader",
+                    "GIT_CONFIG_VALUE_0", "Authorization: Basic " + basic);
+        }
         String basic = Base64.getEncoder()
                 .encodeToString(("oauth2:" + properties.apiToken()).getBytes(StandardCharsets.UTF_8));
         Map<String, String> env = new LinkedHashMap<>();

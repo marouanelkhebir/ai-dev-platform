@@ -115,7 +115,8 @@
             <h3>Identité</h3>
             <div class="grid2">
               <div class="field"><label for="f-name">Nom</label><input id="f-name" required maxlength="128"></div>
-              <div class="field"><label for="f-gitlab">Dépôt GitLab</label><input id="f-gitlab" required></div>
+              <div class="field"><label for="f-provider">Fournisseur du dépôt</label><select id="f-provider"><option value="GITLAB">GitLab</option><option value="BITBUCKET">Bitbucket</option></select></div>
+              <div class="field"><label for="f-gitlab" id="repositoryLabel">Dépôt GitLab</label><input id="f-gitlab" required></div>
               <div class="field"><label for="f-jira">Clé Jira</label><input id="f-jira" maxlength="32" placeholder="BANK"></div>
               <div class="field"><label for="f-image">Image Docker</label><input id="f-image" placeholder="registry.example.com/team/image@sha256:…"><small>Prioritaire sur l’image globale du profil</small></div>
             </div>
@@ -229,6 +230,8 @@
         + (summary.active ? '' : ' · <strong>archivé</strong>');
       $('#f-name').value = summary.name;
       $('#f-description').value = summary.description || '';
+      $('#f-provider').value = summary.scmProvider || 'GITLAB';
+      updateRepositoryCopy();
       $('#f-gitlab').value = summary.gitlabProject;
       $('#f-jira').value = summary.jiraProjectKey || '';
       $('#f-image').value = summary.dockerImage || '';
@@ -258,6 +261,14 @@
         ['Modèles épinglés', Object.entries(resolved.models || {}).map(([role, model]) => `${role}=${model}`).join(', ') || 'mapping de la plateforme']
       ].map(([key, value]) => `<dt>${escape(key)}</dt><dd>${escape(value)}</dd>`).join('');
     }
+
+    function updateRepositoryCopy() {
+      const bitbucket = $('#f-provider').value === 'BITBUCKET';
+      $('#repositoryLabel').textContent = bitbucket ? 'Dépôt Bitbucket' : 'Dépôt GitLab';
+      $('#f-gitlab').placeholder = bitbucket ? 'workspace/repository' : 'bank/customer-management';
+    }
+
+    $('#f-provider').addEventListener('change', updateRepositoryCopy);
 
     /** Reads an argv textarea; an empty box means "use the profile default". */
     function readArgv(id) {
@@ -294,6 +305,7 @@
         const payload = {
           name: $('#f-name').value.trim(),
           description: $('#f-description').value.trim() || null,
+          scmProvider: $('#f-provider').value,
           gitlabProject: $('#f-gitlab').value.trim(),
           jiraProjectKey: $('#f-jira').value.trim() || null,
           dockerImage: $('#f-image').value.trim() || null,

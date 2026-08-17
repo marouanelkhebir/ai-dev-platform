@@ -8,6 +8,7 @@ import com.mel.aidev.persistence.repository.ProjectModelRepository;
 import com.mel.aidev.persistence.repository.ProjectRepository;
 import com.mel.aidev.persistence.repository.ProjectVariableRepository;
 import com.mel.aidev.persistence.repository.WorkflowRepository;
+import com.mel.aidev.gitlab.ScmProjectId;
 import com.mel.aidev.workflow.WorkflowStatus;
 import java.util.EnumSet;
 import java.util.List;
@@ -163,7 +164,8 @@ public class ProjectService {
         ProjectDefinition definition = new ProjectDefinition(
                 name,
                 source.getDescription(),
-                orDefault(gitlabProject, source.getGitlabProject()),
+                source.getScmProvider(),
+                orDefault(gitlabProject, ScmProjectId.repository(source.getGitlabProject())),
                 orDefault(jiraProjectKey, source.getJiraProjectKey()),
                 orDefault(dockerImage, source.getDockerImage()),
                 source.getDefaultBranch(),
@@ -206,7 +208,7 @@ public class ProjectService {
     public ProjectEntity restore(UUID projectId) {
         ProjectEntity project = get(projectId);
         // The repository, the key and the image may have become invalid while the project slept.
-        validator.validateGitLabProject(project.getGitlabProject());
+        validator.validateRepository(project.getScmProvider(), project.getGitlabProject());
         validator.validateJiraProjectKey(project.getJiraProjectKey());
         validator.validateImage(project.getDockerImage());
         project.restore();
@@ -258,7 +260,7 @@ public class ProjectService {
     // ----------------------------------------------------------------- internals
 
     private void apply(ProjectEntity project, ProjectDefinition definition) {
-        validator.validateGitLabProject(definition.gitlabProject());
+        validator.validateRepository(definition.scmProvider(), definition.gitlabProject());
         validator.validateJiraProjectKey(definition.jiraProjectKey());
         validator.validateImage(definition.dockerImage());
         validator.validateBranchPrefix(definition.branchPrefix());
@@ -274,7 +276,10 @@ public class ProjectService {
         }
 
         project.setDescription(trimToNull(definition.description()));
-        project.setGitlabProject(definition.gitlabProject().trim());
+        project.setScmProvider(definition.scmProvider());
+        project.setGitlabProject(definition.scmProvider() == ScmProvider.BITBUCKET
+                ? ScmProjectId.bitbucket(definition.gitlabProject())
+                : definition.gitlabProject().trim());
         project.setJiraProjectKey(
                 definition.jiraProjectKey() == null || definition.jiraProjectKey().isBlank()
                         ? null
