@@ -2,7 +2,9 @@ package com.mel.aidev.git;
 
 import com.mel.aidev.config.GitLabProperties;
 import com.mel.aidev.config.BitbucketProperties;
+import com.mel.aidev.config.GitHubProperties;
 import com.mel.aidev.gitlab.ScmProjectId;
+import com.mel.aidev.project.ScmProvider;
 import com.mel.aidev.gitlab.model.GitLabProject;
 import com.mel.aidev.sandbox.CommandResult;
 import com.mel.aidev.sandbox.Sandbox;
@@ -42,13 +44,20 @@ public class GitOperations {
     private final SandboxManager sandboxManager;
     private final GitLabProperties properties;
     private final BitbucketProperties bitbucketProperties;
+    private final GitHubProperties gitHubProperties;
     private final BranchPolicy branchPolicy;
-    private final Map<String, Boolean> bitbucketSandboxes = new ConcurrentHashMap<>();
+    private final Map<String, ScmProvider> sandboxProviders = new ConcurrentHashMap<>();
 
-    public GitOperations(SandboxManager sandboxManager, GitLabProperties properties, BitbucketProperties bitbucketProperties, BranchPolicy branchPolicy) {
+    public GitOperations(
+            SandboxManager sandboxManager,
+            GitLabProperties properties,
+            BitbucketProperties bitbucketProperties,
+            GitHubProperties gitHubProperties,
+            BranchPolicy branchPolicy) {
         this.sandboxManager = sandboxManager;
         this.properties = properties;
         this.bitbucketProperties = bitbucketProperties;
+        this.gitHubProperties = gitHubProperties;
         this.branchPolicy = branchPolicy;
     }
 
@@ -59,7 +68,7 @@ public class GitOperations {
      * against the base branch to work.
      */
     public void cloneRepository(Sandbox sandbox, GitLabProject project, String baseBranch) {
-        bitbucketSandboxes.put(sandbox.workspacePath(), ScmProjectId.isBitbucket(project.pathWithNamespace()));
+        sandboxProviders.put(sandbox.workspacePath(), providerOf(project.pathWithNamespace()));
         String cloneUrl = project.httpUrlToRepo();
         if (cloneUrl == null || cloneUrl.isBlank()) {
             cloneUrl = properties.rootUrl() + "/" + project.pathWithNamespace() + ".git";
@@ -203,12 +212,27 @@ public class GitOperations {
      * prompt and the command hangs until the sandbox timeout fires.
      */
     private Map<String, String> authenticationEnvironment(Sandbox sandbox) {
-        if (Boolean.TRUE.equals(bitbucketSandboxes.get(sandbox.workspacePath()))) {
+        ScmProvider provider = sandboxProviders.getOrDefault(sandbox.workspacePath(), ScmProvider.GITLAB);
+        if (provider == ScmProvider.BITBUCKET) {
             if (!bitbucketProperties.isConfigured()) {
                 throw new IllegalStateException("Bitbucket is not configured: set BITBUCKET_USERNAME and BITBUCKET_API_TOKEN");
             }
             String basic = Base64.getEncoder().encodeToString(
                     (bitbucketProperties.username() + ":" + bitbucketProperties.apiToken()).getBytes(StandardCharsets.UTF_8));
+            return Map.of(
+                    "GIT_TERMINAL_PROMPT", "0",
+                    "GIT_CONFIG_COUNT", "1",
+                    "GIT_CONFIG_KEY_0", "http.extraHeader",
+                    "GIT_CONFIG_VALUE_0", "Authorization: Basic " + basic);
+        }
+        if (provider == ScmProvider.GITHUB) {
+            if (!gitHubProperties.isConfigured()) {
+                throw new IllegalStateException("GitHub is not configured: set GITHUB_API_TOKEN");
+            }
+            // GitHub accepts a token — personal or app installation — as the password of the
+            // conventional "x-access-token" user; the header form keeps it out of .git/config.
+            String basic = Base64.getEncoder().encodeToString(
+                    ("x-access-token:" + gitHubProperties.apiToken()).getBytes(StandardCharsets.UTF_8));
             return Map.of(
                     "GIT_TERMINAL_PROMPT", "0",
                     "GIT_CONFIG_COUNT", "1",
@@ -225,6 +249,16 @@ public class GitOperations {
         env.put("GIT_CONFIG_KEY_1", "advice.detachedHead");
         env.put("GIT_CONFIG_VALUE_1", "false");
         return env;
+    }
+
+    private static ScmProvider providerOf(String projectId) {
+        if (ScmProjectId.isBitbucket(projectId)) {
+            return ScmProvider.BITBUCKET;
+        }
+        if (ScmProjectId.isGitHub(projectId)) {
+            return ScmProvider.GITHUB;
+        }
+        return ScmProvider.GITLAB;
     }
 
     private Map<String, String> identityEnvironment() {

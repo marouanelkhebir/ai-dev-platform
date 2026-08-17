@@ -204,6 +204,9 @@ public class WorkflowEngine {
         int executed = 0;
         while (run.workflow().getStatus().isRunnable() && executed++ < MAX_STEPS_PER_RUN) {
             WorkflowStatus from = run.workflow().getStatus();
+            // Steps are minutes long and a run chains several of them; the claim has to be renewed
+            // before each one or the workflow starts looking abandoned while it is still running.
+            stateStore.heartbeat(run.workflow().getId());
             WorkflowStepEntity step = stateStore.beginStep(run.workflow().getId(), from);
             try {
                 StepOutcome outcome = executeStep(run, from);

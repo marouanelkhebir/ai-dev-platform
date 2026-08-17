@@ -72,6 +72,13 @@ services:
       GITLAB_API_TOKEN: ${GITLAB_API_TOKEN}
       GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET}
 
+      BITBUCKET_BASE_URL: ${BITBUCKET_BASE_URL:-https://api.bitbucket.org}
+      BITBUCKET_USERNAME: ${BITBUCKET_USERNAME:-}
+      BITBUCKET_API_TOKEN: ${BITBUCKET_API_TOKEN:-}
+
+      GITHUB_BASE_URL: ${GITHUB_BASE_URL:-https://api.github.com}
+      GITHUB_API_TOKEN: ${GITHUB_API_TOKEN:-}
+
       SANDBOX_IMAGE: ai-dev-sandbox:21
       SANDBOX_ANGULAR_IMAGE: ai-dev-sandbox-angular:22
       SANDBOX_PYTHON_IMAGE: ai-dev-sandbox-python:3.11

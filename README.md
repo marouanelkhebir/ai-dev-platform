@@ -1,6 +1,6 @@
 # AI Dev Platform
 
-AI Dev Platform is a Java service that orchestrates a team of LLM agents to turn a Jira ticket or a developer request into a tested GitLab merge request. A human always reviews and merges the resulting merge request.
+AI Dev Platform is a Java service that orchestrates a team of LLM agents to turn a Jira ticket or a developer request into a tested merge request on GitLab, Bitbucket or GitHub. A human always reviews and merges the resulting merge request.
 
 The platform provides a small web console, a REST API and an event stream to follow each workflow.
 
@@ -10,11 +10,11 @@ For each workflow, the platform can:
 
 1. analyse the Jira issue and ask for clarification when needed;
 2. create a technical plan;
-3. clone the target GitLab repository into an isolated Docker sandbox;
+3. clone the target repository — GitLab, Bitbucket or GitHub, chosen per project — into an isolated Docker sandbox;
 4. implement the change, run tests and perform a security review;
-5. push an `ai/` branch and open a GitLab merge request after its gates pass.
+5. push an `ai/` branch and open a merge request (a pull request on Bitbucket and GitHub) after its gates pass.
 
-Workflow state, execution details and model costs are persisted in PostgreSQL. Jira, GitLab and the LLM provider are configured with environment variables or from the settings screen.
+Workflow state, execution details and model costs are persisted in PostgreSQL. Jira, the source-control providers and the LLM provider are configured with environment variables or from the settings screen.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ Jira or developer request
   analysis -> planning -> development -> tests -> security gate
                                                        |
                                                        v
-                                      GitLab branch + merge request
+                                    ai/ branch + merge request
                                                        |
                                                        v
                                             human review and merge
@@ -38,7 +38,7 @@ The application is built with Java 21, Spring Boot 3.3, Maven, PostgreSQL, Docke
 - JDK 21 and Maven 3.9+ (for running outside Docker)
 - Docker Desktop or Docker Engine with Docker Compose v2
 - Access to an OpenAI-compatible LLM API
-- Jira and GitLab service credentials if you want to use their integrations
+- Jira credentials and, for each source-control provider you use, GitLab, Bitbucket or GitHub service credentials
 
 ## Quick start with Docker Compose
 
@@ -78,6 +78,8 @@ cp .env.example .env
 | `JIRA_WEBHOOK_SECRET` | For Jira webhooks | Shared secret used to authenticate Jira webhooks. |
 | `GITLAB_BASE_URL`, `GITLAB_API_TOKEN` | For GitLab | GitLab connection settings. Use a minimally scoped bot token. |
 | `GITLAB_WEBHOOK_SECRET` | For GitLab webhooks | Shared secret used to authenticate GitLab webhooks. |
+| `BITBUCKET_BASE_URL`, `BITBUCKET_USERNAME`, `BITBUCKET_API_TOKEN` | For Bitbucket | Bitbucket Cloud connection settings, used by the projects whose provider is Bitbucket. |
+| `GITHUB_BASE_URL`, `GITHUB_API_TOKEN` | For GitHub | GitHub connection settings, used by the projects whose provider is GitHub. The token needs `contents` and `pull requests` write access; on GitHub Enterprise Server the base URL is the API root, e.g. `https://ghe.company.com/api/v3`. |
 | `DB_PASSWORD` | Optional locally | PostgreSQL password; Compose defaults to `aidev` for local development only. |
 | `MODEL_ANALYSIS`, `MODEL_CODING`, `MODEL_REVIEW`, `MODEL_FAST` | Optional | Model names used for the platform's logical roles. |
 

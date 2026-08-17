@@ -50,7 +50,11 @@ public class WorkflowScheduler {
     @Scheduled(fixedDelayString = "${workflow.scheduler.resume-interval:PT60S}")
     public void resumeRunnableWorkflows() {
         Instant staleBefore = Instant.now().minus(workflowProperties.staleWorkflowTimeout());
-        List<UUID> ids = workflowService.findRunnableWorkflows(staleBefore);
+        // One tick submits at most what the pool and its queue can hold. Anything beyond that would
+        // be shed on submission and re-read on the next tick anyway; asking for it costs a larger
+        // query and a longer transaction for nothing.
+        int batch = workflowProperties.executorPoolSize() * 11;
+        List<UUID> ids = workflowService.findRunnableWorkflows(staleBefore, batch);
         if (ids.isEmpty()) {
             return;
         }

@@ -277,9 +277,7 @@ public class ProjectService {
 
         project.setDescription(trimToNull(definition.description()));
         project.setScmProvider(definition.scmProvider());
-        project.setGitlabProject(definition.scmProvider() == ScmProvider.BITBUCKET
-                ? ScmProjectId.bitbucket(definition.gitlabProject())
-                : definition.gitlabProject().trim());
+        project.setGitlabProject(definition.scmProvider().qualify(definition.gitlabProject()));
         project.setJiraProjectKey(
                 definition.jiraProjectKey() == null || definition.jiraProjectKey().isBlank()
                         ? null

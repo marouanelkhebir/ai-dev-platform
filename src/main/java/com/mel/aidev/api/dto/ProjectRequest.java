@@ -17,7 +17,8 @@ import java.util.Map;
  *
  * @param name unique display name
  * @param scmProvider source-control provider; omitted values keep GitLab for backward compatibility
- * @param gitlabProject repository path (GitLab group/project or Bitbucket workspace/repository)
+ * @param gitlabProject repository path: GitLab group/project, Bitbucket workspace/repository, or
+ *     GitHub owner/repository
  * @param jiraProjectKey Jira key, e.g. {@code BANK}; null for a project driven by free-form requests
  * @param dockerImage pinned image; null to use the global per-profile image
  * @param defaultBranch target branch; null to follow the default branch of the repository

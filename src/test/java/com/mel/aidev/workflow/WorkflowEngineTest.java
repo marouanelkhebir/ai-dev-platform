@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -219,6 +220,28 @@ class WorkflowEngineTest {
         verify(jiraClient).addLabel(TICKET, "traitee-par-ia");
         // The sandbox is always destroyed, even on the happy path.
         verify(sandboxManager).destroySandbox(any());
+    }
+
+    @Test
+    @DisplayName("the claim is refreshed before every step so a long run is never treated as abandoned")
+    void shouldHeartbeatTheClaimBetweenSteps() {
+        givenAnalysableTicket();
+        givenPlannableRepository();
+        givenSuccessfulDevelopment();
+
+        engine.advance(workflow.getId());
+
+        // One heartbeat per step. Without them a run outliving stale-workflow-timeout is re-claimed
+        // by another worker, which would create a second sandbox and push the same branch twice.
+        verify(stateStore, times(countSteps())).heartbeat(workflow.getId());
+    }
+
+    /** Number of steps the happy path executes, taken from the steps actually begun. */
+    private int countSteps() {
+        return mockingDetails(stateStore).getInvocations().stream()
+                .filter(invocation -> "beginStep".equals(invocation.getMethod().getName()))
+                .toList()
+                .size();
     }
 
     @Test

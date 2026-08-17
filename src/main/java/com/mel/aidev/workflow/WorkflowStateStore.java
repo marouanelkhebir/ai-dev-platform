@@ -67,6 +67,25 @@ public class WorkflowStateStore {
         return Optional.of(workflowRepository.saveAndFlush(workflow));
     }
 
+    /**
+     * Extends the claim of a workflow whose run is still in progress.
+     *
+     * <p>Without this, a run that outlives {@code workflow.stale-workflow-timeout} — three
+     * development rounds with a Maven build each will do it — looks abandoned to every other worker.
+     * A second engine would then claim it, create a second sandbox and push the same branch twice.
+     * The engine calls this between steps, so the claim stays fresh for as long as work is happening
+     * and goes stale within one timeout of the worker actually dying.
+     */
+    @Transactional
+    public void heartbeat(UUID workflowId) {
+        try {
+            workflowRepository.refreshClaim(workflowId, Instant.now());
+        } catch (RuntimeException e) {
+            // A missed heartbeat costs one re-claim at worst; failing the step over it costs the run.
+            log.warn("Unable to refresh the claim of workflow {}: {}", workflowId, e.toString());
+        }
+    }
+
     @Transactional
     public void release(UUID workflowId) {
         workflowRepository.findById(workflowId).ifPresent(workflow -> {

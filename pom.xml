@@ -98,6 +98,16 @@
             <version>1.26.2</version>
         </dependency>
 
+        <!--
+          Pooled HTTP transport for the Jira, GitLab, Bitbucket and GitHub clients. It arrives transitively
+          through docker-java anyway; declaring it makes the dependency the REST clients actually
+          need explicit, and lets the Spring Boot BOM manage its version.
+        -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
+
         <!-- ===================== Resilience ===================== -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>

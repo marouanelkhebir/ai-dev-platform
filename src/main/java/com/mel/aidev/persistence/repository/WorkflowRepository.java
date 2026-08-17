@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -45,6 +46,14 @@ public interface WorkflowRepository
 
     Page<WorkflowEntity> findAllByStatusOrderByCreatedAtDesc(WorkflowStatus status, Pageable pageable);
 
+    /**
+     * Runnable workflows nobody owns, oldest first.
+     *
+     * <p>Paged on purpose. After an outage every workflow in the table matches, and an unbounded
+     * result would be loaded into memory and submitted in one burst only for the executor queue to
+     * shed most of it. A bounded slice per tick drains the backlog at the rate the pool can absorb,
+     * and {@code order by updatedAt asc} keeps it fair.
+     */
     @Query(
             """
             select w.id from WorkflowEntity w
@@ -53,7 +62,21 @@ public interface WorkflowRepository
             order by w.updatedAt asc
             """)
     List<UUID> findRunnableIds(
-            @Param("statuses") Collection<WorkflowStatus> statuses, @Param("staleBefore") Instant staleBefore);
+            @Param("statuses") Collection<WorkflowStatus> statuses,
+            @Param("staleBefore") Instant staleBefore,
+            Pageable pageable);
+
+    /**
+     * Refreshes the claim of a workflow the engine is still working on.
+     *
+     * <p>A bulk update rather than a read-modify-write: it leaves {@code @Version} alone, so the
+     * detached entity the engine is holding for the duration of the run stays valid and its next
+     * {@code save} does not fail on an optimistic lock. It also leaves {@code updatedAt} alone, which
+     * keeps the fairness ordering of {@link #findRunnableIds} meaningful.
+     */
+    @Modifying
+    @Query("update WorkflowEntity w set w.claimedAt = :now where w.id = :id")
+    int refreshClaim(@Param("id") UUID id, @Param("now") Instant now);
 
     @Query(
             """

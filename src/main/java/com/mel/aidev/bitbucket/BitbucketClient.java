@@ -1,6 +1,7 @@
 package com.mel.aidev.bitbucket;
 
 import com.mel.aidev.config.BitbucketProperties;
+import com.mel.aidev.config.RestClientConfig;
 import com.mel.aidev.gitlab.GitLabClient;
 import com.mel.aidev.gitlab.GitLabException;
 import com.mel.aidev.gitlab.ScmProjectId;
@@ -129,7 +130,11 @@ public class BitbucketClient implements GitLabClient {
     private RestClient client() {
         if (!properties.isConfigured()) throw new GitLabException("Bitbucket is not configured: set bitbucket.username and bitbucket.api-token");
         String credentials = Base64.getEncoder().encodeToString((properties.username() + ":" + properties.apiToken()).getBytes(StandardCharsets.UTF_8));
+        // Explicit timeouts and a pooled transport, like Jira and GitLab. Without a request factory
+        // this client inherited the JDK default of no timeout at all: a silent Bitbucket would hold a
+        // workflow thread until the step timeout, with the workflow's claim held for the duration.
         return RestClient.builder().baseUrl(properties.apiBaseUrl()).defaultHeader(HttpHeaders.AUTHORIZATION, "Basic " + credentials)
+                .requestFactory(RestClientConfig.requestFactory(properties.connectTimeout(), properties.readTimeout()))
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE).build();
     }
     private static String repository(String projectId) { return ScmProjectId.repository(projectId); }

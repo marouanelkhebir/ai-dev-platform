@@ -115,7 +115,7 @@
             <h3>Identité</h3>
             <div class="grid2">
               <div class="field"><label for="f-name">Nom</label><input id="f-name" required maxlength="128"></div>
-              <div class="field"><label for="f-provider">Fournisseur du dépôt</label><select id="f-provider"><option value="GITLAB">GitLab</option><option value="BITBUCKET">Bitbucket</option></select></div>
+              <div class="field"><label for="f-provider">Fournisseur du dépôt</label><select id="f-provider"><option value="GITLAB">GitLab</option><option value="BITBUCKET">Bitbucket</option><option value="GITHUB">GitHub</option></select></div>
               <div class="field"><label for="f-gitlab" id="repositoryLabel">Dépôt GitLab</label><input id="f-gitlab" required></div>
               <div class="field"><label for="f-jira">Clé Jira</label><input id="f-jira" maxlength="32" placeholder="BANK"></div>
               <div class="field"><label for="f-image">Image Docker</label><input id="f-image" placeholder="registry.example.com/team/image@sha256:…"><small>Prioritaire sur l’image globale du profil</small></div>
@@ -262,10 +262,15 @@
       ].map(([key, value]) => `<dt>${escape(key)}</dt><dd>${escape(value)}</dd>`).join('');
     }
 
+    const REPOSITORY_COPY = {
+      GITLAB: { label:'Dépôt GitLab', placeholder:'bank/customer-management' },
+      BITBUCKET: { label:'Dépôt Bitbucket', placeholder:'workspace/repository' },
+      GITHUB: { label:'Dépôt GitHub', placeholder:'owner/repository' }
+    };
     function updateRepositoryCopy() {
-      const bitbucket = $('#f-provider').value === 'BITBUCKET';
-      $('#repositoryLabel').textContent = bitbucket ? 'Dépôt Bitbucket' : 'Dépôt GitLab';
-      $('#f-gitlab').placeholder = bitbucket ? 'workspace/repository' : 'bank/customer-management';
+      const copy = REPOSITORY_COPY[$('#f-provider').value] || REPOSITORY_COPY.GITLAB;
+      $('#repositoryLabel').textContent = copy.label;
+      $('#f-gitlab').placeholder = copy.placeholder;
     }
 
     $('#f-provider').addEventListener('change', updateRepositoryCopy);

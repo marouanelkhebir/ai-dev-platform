@@ -1,6 +1,7 @@
 package com.mel.aidev.gitlab;
 
 import com.mel.aidev.bitbucket.BitbucketClient;
+import com.mel.aidev.github.GitHubClient;
 import com.mel.aidev.gitlab.model.CreateMergeRequestCommand;
 import com.mel.aidev.gitlab.model.GitLabProject;
 import com.mel.aidev.gitlab.model.MergeRequest;
@@ -18,9 +19,19 @@ import org.springframework.stereotype.Component;
 public class RoutingGitLabClient implements GitLabClient {
     private final RestGitLabClient gitlab;
     private final BitbucketClient bitbucket;
+    private final GitHubClient github;
 
-    public RoutingGitLabClient(RestGitLabClient gitlab, BitbucketClient bitbucket) { this.gitlab = gitlab; this.bitbucket = bitbucket; }
-    private GitLabClient client(String project) { return ScmProjectId.isBitbucket(project) ? bitbucket : gitlab; }
+    public RoutingGitLabClient(RestGitLabClient gitlab, BitbucketClient bitbucket, GitHubClient github) {
+        this.gitlab = gitlab;
+        this.bitbucket = bitbucket;
+        this.github = github;
+    }
+
+    private GitLabClient client(String project) {
+        if (ScmProjectId.isBitbucket(project)) return bitbucket;
+        if (ScmProjectId.isGitHub(project)) return github;
+        return gitlab;
+    }
     @Override public GitLabProject getProject(String id) { return client(id).getProject(id); }
     @Override public List<String> listRepositoryFiles(String id, String ref, int max) { return client(id).listRepositoryFiles(id, ref, max); }
     @Override public Optional<String> readFile(String id, String ref, String path) { return client(id).readFile(id, ref, path); }

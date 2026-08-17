@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-This is a Java 21 / Spring Boot 3.3 Maven service. Production code is under `src/main/java/com/company/aidev/`; packages map to platform concerns: `api/` for HTTP endpoints, `workflow/` for the persisted state machine, `agent/` and `tool/` for LLM agents, `persistence/` for JPA, `settings/` for persisted platform configuration and build profiles, and `security/` and `sandbox/` for enforcement. Configuration and Flyway migrations (`src/main/resources/db/migration/`) live in `src/main/resources/`; test configuration is `src/test/resources/application-test.yml`.
+This is a Java 21 / Spring Boot 3.3 Maven service. Production code is under `src/main/java/com/mel/aidev/`; packages map to platform concerns: `api/` for HTTP endpoints, `workflow/` for the persisted state machine, `agent/` and `tool/` for LLM agents, `persistence/` for JPA, `settings/` for persisted platform configuration and build profiles, and `security/` and `sandbox/` for enforcement. Configuration and Flyway migrations (`src/main/resources/db/migration/`) live in `src/main/resources/`; test configuration is `src/test/resources/application-test.yml`.
 
 Tests mirror production packages in `src/test/java/`. Repository-onboarding templates belong in `docs/ai-template/`; container definitions are in `docker/`, `Dockerfile`, and `docker-compose.yml`.
 

@@ -13,4 +13,13 @@ class ScmProjectIdTest {
         assertThat(ScmProjectId.repository("bitbucket:workspace/repository")).isEqualTo("workspace/repository");
         assertThat(ScmProjectId.isBitbucket("bitbucket:workspace/repository")).isTrue();
     }
+
+    @Test
+    void marksGitHubIdentifiers() {
+        assertThat(ScmProjectId.github("owner/repository")).isEqualTo("github:owner/repository");
+        assertThat(ScmProjectId.repository("github:owner/repository")).isEqualTo("owner/repository");
+        assertThat(ScmProjectId.isGitHub("github:owner/repository")).isTrue();
+        assertThat(ScmProjectId.isGitHub("bitbucket:workspace/repository")).isFalse();
+        assertThat(ScmProjectId.isBitbucket("github:owner/repository")).isFalse();
+    }
 }

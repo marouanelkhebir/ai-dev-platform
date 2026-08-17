@@ -353,8 +353,16 @@ public class DevelopmentWorkflowService {
         return true;
     }
 
+    /**
+     * Ids of the workflows the scheduler may pick up, oldest first and at most {@code limit} of them.
+     *
+     * <p>The cap is what keeps a recovery tick proportionate: after an outage the whole table is
+     * runnable, and submitting all of it would only fill the executor queue so the rest is shed.
+     * Draining a slice per tick reaches the same place without the burst.
+     */
     @Transactional(readOnly = true)
-    public List<UUID> findRunnableWorkflows(java.time.Instant staleBefore) {
-        return workflowRepository.findRunnableIds(WorkflowStatus.runnableStatuses(), staleBefore);
+    public List<UUID> findRunnableWorkflows(Instant staleBefore, int limit) {
+        return workflowRepository.findRunnableIds(
+                WorkflowStatus.runnableStatuses(), staleBefore, PageRequest.of(0, limit));
     }
 }

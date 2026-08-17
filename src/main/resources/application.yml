@@ -167,6 +167,16 @@ bitbucket:
   connect-timeout: PT5S
   read-timeout: PT30S
 
+# -------------------------------------------------------------------- GitHub
+# GitHub owner/repository paths are selected per project. The token needs "contents" and
+# "pull requests" write access on the repositories the platform works on. For GitHub Enterprise
+# Server the base URL is the API root, e.g. https://ghe.company.com/api/v3.
+github:
+  base-url: ${GITHUB_BASE_URL:https://api.github.com}
+  api-token: ${GITHUB_API_TOKEN:}
+  connect-timeout: PT5S
+  read-timeout: PT30S
+
 # ------------------------------------------------------------------- Sandbox
 sandbox:
   docker-host: ${DOCKER_HOST:unix:///var/run/docker.sock}
