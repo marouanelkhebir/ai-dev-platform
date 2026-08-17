@@ -239,6 +239,15 @@ workflow:
     detail-days: 90
     batch-size: 200
     cron: "0 30 3 * * *"
+  # Full output of every step — container commands and the platform log of the step — stored gzipped
+  # in workflow_step_log and served by /api/workflows/{id}/logs. This is the debugging trail of a
+  # failed run. It is also the largest thing the platform writes, hence its own budget and lifetime.
+  logs:
+    enabled: true
+    # ~20 MB of build output per step. Past it the middle is dropped, the head and the tail are kept.
+    max-chars-per-step: 20000000
+    # Purged with the nightly retention job; 0 keeps them forever.
+    retention-days: 14
   scheduler:
     resume-interval: PT60S
     pipeline-poll-interval: PT120S

@@ -17,6 +17,13 @@
         </encoder>
     </appender>
 
+    <!--
+      Copies every event that carries a workflowId into the log of the running step, which is then
+      compressed and stored in workflow_step_log. Attached to the root logger so that the platform,
+      LangChain4j and the Docker client are all captured, never only com.mel.aidev.
+    -->
+    <appender name="STEP" class="com.mel.aidev.observability.StepLogAppender"/>
+
     <springProfile name="json">
         <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
@@ -36,12 +43,14 @@
 
         <root level="INFO">
             <appender-ref ref="JSON"/>
+            <appender-ref ref="STEP"/>
         </root>
     </springProfile>
 
     <springProfile name="!json">
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="STEP"/>
         </root>
     </springProfile>
 

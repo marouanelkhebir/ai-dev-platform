@@ -28,6 +28,7 @@ import com.mel.aidev.jira.JiraClient;
 import com.mel.aidev.jira.model.JiraIssue;
 import com.mel.aidev.observability.LogContext;
 import com.mel.aidev.observability.PlatformMetrics;
+import com.mel.aidev.observability.StepLogBuffer;
 import com.mel.aidev.persistence.entity.MergeRequestEntity;
 import com.mel.aidev.persistence.entity.ReviewResultEntity;
 import com.mel.aidev.persistence.entity.TestResultEntity;
@@ -78,6 +79,7 @@ public class WorkflowEngine {
     private final ConcurrentHashMap<UUID, Boolean> inFlight = new ConcurrentHashMap<>();
 
     private final WorkflowStateStore stateStore;
+    private final WorkflowStepLogService stepLogService;
     private final WorkflowArtifactCodec codec;
     private final WorkflowProperties workflowProperties;
     private final GitLabProperties gitLabProperties;
@@ -109,6 +111,7 @@ public class WorkflowEngine {
     @SuppressWarnings("java:S107") // an orchestrator legitimately depends on every collaborator
     public WorkflowEngine(
             WorkflowStateStore stateStore,
+            WorkflowStepLogService stepLogService,
             WorkflowArtifactCodec codec,
             WorkflowProperties workflowProperties,
             GitLabProperties gitLabProperties,
@@ -134,6 +137,7 @@ public class WorkflowEngine {
             TestResultRepository testResultRepository,
             ReviewResultRepository reviewResultRepository) {
         this.stateStore = stateStore;
+        this.stepLogService = stepLogService;
         this.codec = codec;
         this.workflowProperties = workflowProperties;
         this.gitLabProperties = gitLabProperties;
@@ -208,6 +212,9 @@ public class WorkflowEngine {
             // before each one or the workflow starts looking abandoned while it is still running.
             stateStore.heartbeat(run.workflow().getId());
             WorkflowStepEntity step = stateStore.beginStep(run.workflow().getId(), from);
+            // Opened before the step runs and stored in the finally: the log of a step that threw is
+            // the one worth keeping, so it must not depend on the step reaching its own end.
+            StepLogBuffer stepLog = stepLogService.begin(step, run.workflow().getJiraTicket());
             try {
                 StepOutcome outcome = executeStep(run, from);
                 applyOutcome(run, outcome);
@@ -217,6 +224,8 @@ public class WorkflowEngine {
                 fail(run, "Step " + from + " failed: " + e.getMessage());
                 stateStore.completeStep(step, WorkflowStatus.FAILED, false, null, e.toString());
                 return;
+            } finally {
+                stepLogService.persist(stepLog);
             }
         }
         if (executed >= MAX_STEPS_PER_RUN) {

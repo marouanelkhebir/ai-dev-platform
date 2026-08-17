@@ -1,5 +1,6 @@
 package com.mel.aidev.project;
 
+import com.mel.aidev.workflow.WorkflowStepLogService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,9 +21,11 @@ public class RetentionScheduler {
     private static final Logger log = LoggerFactory.getLogger(RetentionScheduler.class);
 
     private final RetentionService retentionService;
+    private final WorkflowStepLogService stepLogService;
 
-    public RetentionScheduler(RetentionService retentionService) {
+    public RetentionScheduler(RetentionService retentionService, WorkflowStepLogService stepLogService) {
         this.retentionService = retentionService;
+        this.stepLogService = stepLogService;
     }
 
     @Scheduled(cron = "${workflow.retention.cron:0 30 3 * * *}")
@@ -32,6 +35,14 @@ public class RetentionScheduler {
         } catch (RuntimeException e) {
             // A failed purge must not take the scheduler down: the next run picks up where it stopped.
             log.error("Retention purge failed", e);
+        }
+        try {
+            // Separate pass, and separate failure: step logs live on their own, shorter schedule
+            // because they are the bulk of the volume, and losing them costs a debugging trail, not
+            // the audit trail.
+            stepLogService.purgeOlderThanRetention();
+        } catch (RuntimeException e) {
+            log.error("Step log purge failed", e);
         }
     }
 }

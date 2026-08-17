@@ -3,6 +3,8 @@ package com.mel.aidev.sandbox;
 import com.mel.aidev.config.SandboxProperties;
 import com.mel.aidev.domain.BuildProfile;
 import com.mel.aidev.observability.PlatformMetrics;
+import com.mel.aidev.observability.StepLogBuffer;
+import com.mel.aidev.observability.StepLogs;
 import com.mel.aidev.security.ImagePolicy;
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.async.ResultCallback;
@@ -193,6 +195,11 @@ public class DockerSandboxManager implements SandboxManager {
             Map<String, String> environment) {
         Instant start = Instant.now();
         boolean success = false;
+        // Everything the container prints is streamed into the log of the running step, in full.
+        // What CommandResult carries is a bounded copy for the agent; this is the copy for the human
+        // who has to understand, three days later, why the build failed.
+        StepLogBuffer stepLog = StepLogs.current(sandbox.workflowId());
+        stepLog.line("$ %s (cwd=%s, timeout=%s, at=%s)".formatted(String.join(" ", command), workingDirectory, timeout, start));
         try {
             var execCmd = client().execCreateCmd(sandbox.containerId())
                     .withCmd(command.toArray(new String[0]))
@@ -206,7 +213,7 @@ public class DockerSandboxManager implements SandboxManager {
             }
             ExecCreateCmdResponse exec = execCmd.exec();
 
-            BoundedOutputCollector collector = new BoundedOutputCollector(properties.maxOutputChars());
+            BoundedOutputCollector collector = new BoundedOutputCollector(properties.maxOutputChars(), stepLog);
             boolean completed;
             try {
                 completed = client().execStartCmd(exec.getId())
@@ -219,6 +226,7 @@ public class DockerSandboxManager implements SandboxManager {
 
             if (!completed) {
                 log.warn("Command timed out after {} in container {}: {}", timeout, shortId(sandbox.containerId()), command);
+                stepLog.line("[timed out after %s]".formatted(timeout));
                 return new CommandResult(
                         command,
                         124,
@@ -231,11 +239,13 @@ public class DockerSandboxManager implements SandboxManager {
             Long exitCode = client().inspectExecCmd(exec.getId()).exec().getExitCodeLong();
             int code = exitCode == null ? -1 : exitCode.intValue();
             success = code == 0;
+            stepLog.line("[exit=%d duration=%dms]".formatted(code, Duration.between(start, Instant.now()).toMillis()));
             return new CommandResult(
                     command, code, collector.stdout(), collector.stderr(), Duration.between(start, Instant.now()), false);
         } catch (SandboxException e) {
             throw e;
         } catch (RuntimeException e) {
+            stepLog.line("[the command could not be run: %s]".formatted(e));
             throw new SandboxException("Command failed in sandbox: " + command, e);
         } finally {
             metrics.sandboxCommand(command.isEmpty() ? "unknown" : command.get(0), Duration.between(start, Instant.now()), success);
@@ -270,6 +280,11 @@ public class DockerSandboxManager implements SandboxManager {
         String parent = absolutePath.substring(0, absolutePath.lastIndexOf('/'));
         String fileName = absolutePath.substring(absolutePath.lastIndexOf('/') + 1);
         byte[] payload = content == null ? new byte[0] : content.getBytes(StandardCharsets.UTF_8);
+
+        // The file itself is not copied into the trail — it is in the repository and in the diff —
+        // but knowing which files a step wrote, and when, is what makes the rest of it readable.
+        StepLogs.current(sandbox.workflowId())
+                .line("[write %s (%d bytes) at %s]".formatted(absolutePath, payload.length, Instant.now()));
 
         byte[] archive = buildTar(fileName, payload);
         try (InputStream in = new ByteArrayInputStream(archive)) {
@@ -407,20 +422,29 @@ public class DockerSandboxManager implements SandboxManager {
         return containerId == null || containerId.length() < 12 ? String.valueOf(containerId) : containerId.substring(0, 12);
     }
 
-    /** Collects stdout and stderr while capping memory usage. */
+    /**
+     * Collects stdout and stderr while capping memory usage.
+     *
+     * <p>The cap applies to what the agent will read; the step log receives every frame as it
+     * arrives, in the order the container produced it, so the two streams stay interleaved the way
+     * they would be on a terminal.
+     */
     private static final class BoundedOutputCollector extends ResultCallback.Adapter<Frame> {
 
         private final StringBuilder stdout = new StringBuilder();
         private final StringBuilder stderr = new StringBuilder();
         private final int maxChars;
+        private final StepLogBuffer stepLog;
 
-        private BoundedOutputCollector(int maxChars) {
+        private BoundedOutputCollector(int maxChars, StepLogBuffer stepLog) {
             this.maxChars = maxChars;
+            this.stepLog = stepLog;
         }
 
         @Override
         public void onNext(Frame frame) {
             String text = new String(frame.getPayload(), StandardCharsets.UTF_8);
+            stepLog.append(text);
             StringBuilder target = frame.getStreamType() == StreamType.STDERR ? stderr : stdout;
             if (target.length() < maxChars) {
                 target.append(text);

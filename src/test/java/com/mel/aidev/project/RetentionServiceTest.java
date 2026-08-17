@@ -64,7 +64,7 @@ class RetentionServiceTest {
                 agentExecutionRepository,
                 toolExecutionRepository,
                 llmExecutionRepository,
-                new WorkflowProperties(null, null, null, null, null, null, null, null, null, null),
+                new WorkflowProperties(null, null, null, null, null, null, null, null, null, null, null),
                 new ObjectMapper());
 
         when(stepRepository.findByWorkflowIdOrderBySequenceNumberAsc(WORKFLOW_ID)).thenReturn(List.of());

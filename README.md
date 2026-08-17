@@ -122,6 +122,29 @@ curl -H "X-Api-Key: $PLATFORM_API_KEY" \
 
 See the Swagger UI for request examples and the full endpoint reference.
 
+## Debugging a run
+
+Every step of a workflow stores its complete output — every command executed in the container, with
+its exit code and duration, plus the platform log emitted during that step. It is stored gzipped in
+`workflow_step_log` and served as plain text:
+
+```bash
+curl -H "X-Api-Key: $PLATFORM_API_KEY" \
+  http://localhost:8080/api/workflows/$WORKFLOW_ID/steps/4/logs
+```
+
+The whole run, as a file:
+
+```bash
+curl -H "X-Api-Key: $PLATFORM_API_KEY" -o run.log.gz \
+  "http://localhost:8080/api/workflows/$WORKFLOW_ID/logs?download=true"
+```
+
+The console exposes the same logs per step, with a download button. Secrets are redacted before the
+log is written, a step is capped at `workflow.logs.max-chars-per-step` (the head and the tail are
+kept when it overflows), and the logs of a finished workflow are deleted after
+`workflow.logs.retention-days`, ahead of the audit payloads.
+
 ## Security notes
 
 - Local credentials belong only in `.env`, which is excluded from Git and the Docker build context.

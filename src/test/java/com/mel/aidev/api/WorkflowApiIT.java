@@ -3,20 +3,30 @@ package com.mel.aidev.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mel.aidev.gitlab.GitLabClient;
 import com.mel.aidev.gitlab.model.GitLabProject;
 import com.mel.aidev.jira.JiraClient;
 import com.mel.aidev.persistence.entity.ProjectEntity;
+import com.mel.aidev.persistence.entity.WorkflowStepEntity;
+import com.mel.aidev.persistence.entity.WorkflowStepLogEntity;
 import com.mel.aidev.persistence.repository.ProjectRepository;
 import com.mel.aidev.persistence.repository.WorkflowRepository;
+import com.mel.aidev.persistence.repository.WorkflowStepLogRepository;
+import com.mel.aidev.persistence.repository.WorkflowStepRepository;
 import com.mel.aidev.sandbox.SandboxManager;
 import com.mel.aidev.security.ApiKeyFilter;
 import com.mel.aidev.workflow.WorkflowEngine;
 import com.mel.aidev.workflow.WorkflowStatus;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.zip.GZIPInputStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,6 +36,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
@@ -53,6 +64,12 @@ class WorkflowApiIT {
 
     @Autowired
     private ProjectRepository projectRepository;
+
+    @Autowired
+    private WorkflowStepRepository stepRepository;
+
+    @Autowired
+    private WorkflowStepLogRepository stepLogRepository;
 
     @MockBean
     private WorkflowEngine workflowEngine;
@@ -168,6 +185,44 @@ class WorkflowApiIT {
                 .andExpect(jsonPath("$.workflow.jiraTicket").value("BANK-1245"))
                 .andExpect(jsonPath("$.steps").isArray())
                 .andExpect(jsonPath("$.agentExecutions").isArray());
+    }
+
+    @Test
+    @DisplayName("serves the full log of a step, and the whole run as a gzip file")
+    void shouldServeStepLogs() throws Exception {
+        String response = mockMvc.perform(post("/api/workflows")
+                        .header("X-Api-Key", API_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CREATE_BODY))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        UUID id = UUID.fromString(response.replaceAll(".*\"id\":\"([^\"]+)\".*", "$1"));
+
+        WorkflowStepEntity step = stepRepository.saveAndFlush(new WorkflowStepEntity(id, 1, WorkflowStatus.DEVELOPING));
+        stepLogRepository.saveAndFlush(
+                new WorkflowStepLogEntity(id, step.getId(), 1, "[ERROR] Fee.java:[42,9] cannot find symbol", false));
+
+        mockMvc.perform(get("/api/workflows/{id}/steps/{sequence}/logs", id, 1).header("X-Api-Key", API_KEY))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("cannot find symbol")));
+
+        mockMvc.perform(get("/api/workflows/{id}/steps/{sequence}/logs", id, 99).header("X-Api-Key", API_KEY))
+                .andExpect(status().isNotFound());
+
+        MvcResult download = mockMvc.perform(
+                        get("/api/workflows/{id}/logs", id).param("download", "true").header("X-Api-Key", API_KEY))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        byte[] gzipped = mockMvc.perform(asyncDispatch(download))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsByteArray();
+
+        try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(gzipped))) {
+            assertThat(new String(gzip.readAllBytes(), StandardCharsets.UTF_8)).contains("cannot find symbol");
+        }
     }
 
     @Test

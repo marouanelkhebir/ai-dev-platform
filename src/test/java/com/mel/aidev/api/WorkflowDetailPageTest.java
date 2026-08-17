@@ -50,6 +50,16 @@ class WorkflowDetailPageTest {
         assertThat(html).contains("Ce que vous devez préciser");
     }
 
+    @Test
+    void offersTheFullLogOfEveryStep() throws IOException {
+        String html = page();
+
+        assertThat(html).contains("Logs complets des étapes");
+        assertThat(html).contains("/steps/${details.dataset.sequence}/logs");
+        assertThat(html).contains("/logs?download=true");
+        assertThat(html).contains("Télécharger tout (.gz)");
+    }
+
     private static String page() throws IOException {
         try (var resource = WorkflowDetailPageTest.class.getResourceAsStream("/static/workflow.html")) {
             assertThat(resource).as("workflow detail page resource").isNotNull();

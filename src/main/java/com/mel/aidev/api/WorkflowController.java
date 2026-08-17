@@ -20,8 +20,12 @@ import com.mel.aidev.project.ProjectService;
 import com.mel.aidev.workflow.DevelopmentWorkflowService;
 import com.mel.aidev.workflow.WorkflowArtifactCodec;
 import com.mel.aidev.workflow.WorkflowStatus;
+import com.mel.aidev.workflow.WorkflowStepLogService;
 import jakarta.validation.Valid;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -38,6 +42,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 /** REST API of the platform. */
 @RestController
@@ -51,7 +56,9 @@ public class WorkflowController {
     private final ToolExecutionRepository toolExecutionRepository;
     private final WorkflowArtifactCodec codec;
     private final WorkflowEventStream eventStream;
+    private final WorkflowStepLogService stepLogService;
 
+    @SuppressWarnings("java:S107")
     public WorkflowController(
             DevelopmentWorkflowService workflowService,
             ProjectService projectService,
@@ -59,7 +66,8 @@ public class WorkflowController {
             AgentExecutionRepository agentExecutionRepository,
             ToolExecutionRepository toolExecutionRepository,
             WorkflowArtifactCodec codec,
-            WorkflowEventStream eventStream) {
+            WorkflowEventStream eventStream,
+            WorkflowStepLogService stepLogService) {
         this.workflowService = workflowService;
         this.projectService = projectService;
         this.stepRepository = stepRepository;
@@ -67,6 +75,7 @@ public class WorkflowController {
         this.toolExecutionRepository = toolExecutionRepository;
         this.codec = codec;
         this.eventStream = eventStream;
+        this.stepLogService = stepLogService;
     }
 
     /**
@@ -200,7 +209,50 @@ public class WorkflowController {
                 codec.read(workflow.getSecurityReportJson(), SecurityReport.class).orElse(null),
                 codec.read(workflow.getAcceptanceReportJson(), AcceptanceReport.class).orElse(null),
                 steps,
-                executions);
+                executions,
+                stepLogService.summaries(id).stream()
+                        .map(summary -> new WorkflowDetailResponse.StepLogView(
+                                summary.sequence(),
+                                summary.uncompressedChars(),
+                                summary.compressedBytes(),
+                                summary.truncated()))
+                        .toList());
+    }
+
+    /**
+     * The full output of one step: every command run in the container, and the platform log of the
+     * step. This is what a developer reads when a run failed and the audit summary is not enough.
+     */
+    @GetMapping(path = "/{id}/steps/{sequence}/logs", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> stepLogs(@PathVariable UUID id, @PathVariable int sequence) {
+        workflowService.get(id);
+        return stepLogService.stepLog(id, sequence).map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Every step log of a workflow, in order.
+     *
+     * <p>Streamed rather than assembled: a long run holds tens of megabytes of logs. With {@code
+     * download=true} the response is the gzipped file, which is also how it sits in the database.
+     */
+    @GetMapping("/{id}/logs")
+    public ResponseEntity<StreamingResponseBody> logs(
+            @PathVariable UUID id, @RequestParam(defaultValue = "false") boolean download) {
+
+        WorkflowEntity workflow = workflowService.get(id);
+        if (!download) {
+            StreamingResponseBody body = output -> {
+                Writer writer = new OutputStreamWriter(output, StandardCharsets.UTF_8);
+                stepLogService.writeTo(id, writer);
+                writer.flush();
+            };
+            return ResponseEntity.ok().contentType(MediaType.TEXT_PLAIN).body(body);
+        }
+        String fileName = "workflow-" + workflow.getJiraTicket() + "-" + id + ".log.gz";
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
+                .body(output -> stepLogService.writeGzipTo(id, output));
     }
 
     @PostMapping("/{id}/retry")

@@ -26,7 +26,8 @@ public record WorkflowDetailResponse(
         SecurityReport securityReport,
         AcceptanceReport acceptanceReport,
         List<StepView> steps,
-        List<AgentExecutionView> agentExecutions) {
+        List<AgentExecutionView> agentExecutions,
+        List<StepLogView> stepLogs) {
 
     /**
      * One transition of the state machine.
@@ -68,6 +69,16 @@ public record WorkflowDetailResponse(
             String response,
             String structuredResponse,
             List<ToolExecutionView> tools) {}
+
+    /**
+     * What the full log of a step weighs, without inflating it.
+     *
+     * <p>The log itself is fetched on demand from {@code /api/workflows/{id}/steps/{sequence}/logs}:
+     * it is megabytes of build output and has no place in the detail payload.
+     *
+     * @param truncated true when the step exceeded its budget and its middle was dropped
+     */
+    public record StepLogView(int sequence, long characters, long compressedBytes, boolean truncated) {}
 
     /** A redacted tool invocation, including the command output produced in the sandbox. */
     public record ToolExecutionView(

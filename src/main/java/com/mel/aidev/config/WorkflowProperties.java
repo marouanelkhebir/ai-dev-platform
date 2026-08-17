@@ -20,7 +20,8 @@ public record WorkflowProperties(
         Integer executorPoolSize,
         Boolean autoStartFromJiraWebhook,
         Boolean allowAutoMerge,
-        Retention retention) {
+        Retention retention,
+        Logs logs) {
 
     public WorkflowProperties {
         maxDevelopmentAttempts = maxDevelopmentAttempts == null ? 3 : maxDevelopmentAttempts;
@@ -34,6 +35,7 @@ public record WorkflowProperties(
         // Automatic merge is deliberately disabled in v1 and the engine refuses to enable it.
         allowAutoMerge = allowAutoMerge != null && allowAutoMerge;
         retention = retention == null ? new Retention(null, null, null) : retention;
+        logs = logs == null ? new Logs(null, null, null) : logs;
     }
 
     /**
@@ -53,6 +55,33 @@ public record WorkflowProperties(
             enabled = enabled == null || enabled;
             detailDays = detailDays == null ? 90 : detailDays;
             batchSize = batchSize == null || batchSize <= 0 ? 200 : batchSize;
+        }
+    }
+
+    /**
+     * Capture of the full output of each step.
+     *
+     * <p>This is the debugging trail: everything the container printed, plus the platform log of the
+     * step. It is by far the largest thing the platform stores, so it has a budget per step and a
+     * lifetime of its own, both shorter than what the audit payloads get.
+     *
+     * @param enabled whether steps record their output at all
+     * @param maxCharsPerStep budget of one step; past it the middle of the step is dropped and the
+     *     head and the tail are kept, because that is where the cause and the failure are
+     * @param retentionDays age past which the logs of a finished workflow are deleted, 0 to keep them
+     */
+    public record Logs(Boolean enabled, Integer maxCharsPerStep, Integer retentionDays) {
+
+        public Logs {
+            enabled = enabled == null || enabled;
+            // ~20 MB of ASCII build output, which gzips to well under a megabyte in the row.
+            maxCharsPerStep = maxCharsPerStep == null || maxCharsPerStep < 0 ? 20_000_000 : maxCharsPerStep;
+            retentionDays = retentionDays == null ? 14 : Math.max(retentionDays, 0);
+        }
+
+        /** Budget to apply, zero when capture is disabled. */
+        public int effectiveMaxChars() {
+            return enabled ? maxCharsPerStep : 0;
         }
     }
 }

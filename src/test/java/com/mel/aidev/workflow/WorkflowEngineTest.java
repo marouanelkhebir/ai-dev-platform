@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.never;
@@ -51,10 +52,13 @@ import com.mel.aidev.gitlab.model.MergeRequest;
 import com.mel.aidev.jira.JiraClient;
 import com.mel.aidev.jira.model.JiraIssue;
 import com.mel.aidev.observability.PlatformMetrics;
+import com.mel.aidev.observability.StepLogs;
 import com.mel.aidev.persistence.entity.WorkflowEntity;
 import com.mel.aidev.persistence.entity.WorkflowStepEntity;
+import com.mel.aidev.persistence.entity.WorkflowStepLogEntity;
 import com.mel.aidev.persistence.repository.MergeRequestRepository;
 import com.mel.aidev.persistence.repository.ReviewResultRepository;
+import com.mel.aidev.persistence.repository.WorkflowStepLogRepository;
 import com.mel.aidev.project.ProjectConfiguration;
 import com.mel.aidev.project.WorkflowLaunchConfiguration;
 import com.mel.aidev.persistence.repository.TestResultRepository;
@@ -62,6 +66,7 @@ import com.mel.aidev.rules.RepositoryRulesLoader;
 import com.mel.aidev.sandbox.Sandbox;
 import com.mel.aidev.sandbox.SandboxManager;
 import com.mel.aidev.security.BranchPolicy;
+import com.mel.aidev.security.SecretRedactor;
 import com.mel.aidev.settings.PlatformSettings;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -73,6 +78,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /**
  * End-to-end test of the orchestrator with every external system mocked.
@@ -102,6 +108,7 @@ class WorkflowEngineTest {
 
     private WorkflowEngine engine;
     private WorkflowEntity workflow;
+    private WorkflowStepLogRepository stepLogRepository;
 
     @BeforeEach
     void setUp() {
@@ -134,7 +141,7 @@ class WorkflowEngineTest {
                 null);
         JiraProperties jiraProperties = new JiraProperties(
                 "https://company.atlassian.net", "bot@company.com", "token", "3", null, null, null, null, null, null);
-        WorkflowProperties workflowProperties = new WorkflowProperties(2, 2, 2, null, null, null, 1, true, false, null);
+        WorkflowProperties workflowProperties = new WorkflowProperties(2, 2, 2, null, null, null, 1, true, false, null, null);
         SandboxProperties sandboxProperties = new SandboxProperties(
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
 
@@ -173,8 +180,12 @@ class WorkflowEngineTest {
                 .thenAnswer(invocation ->
                         new WorkflowStepEntity(invocation.getArgument(0), 1, invocation.getArgument(1)));
 
+        stepLogRepository = mock(WorkflowStepLogRepository.class);
+        when(stepLogRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
         engine = new WorkflowEngine(
                 stateStore,
+                new WorkflowStepLogService(stepLogRepository, new SecretRedactor(), workflowProperties),
                 new WorkflowArtifactCodec(new ObjectMapper()),
                 workflowProperties,
                 gitLabProperties,
@@ -234,6 +245,46 @@ class WorkflowEngineTest {
         // One heartbeat per step. Without them a run outliving stale-workflow-timeout is re-claimed
         // by another worker, which would create a second sandbox and push the same branch twice.
         verify(stateStore, times(countSteps())).heartbeat(workflow.getId());
+    }
+
+    @Test
+    @DisplayName("every step stores its own log, including the output of the container")
+    void shouldStoreOneLogPerStep() {
+        givenAnalysableTicket();
+        givenPlannableRepository();
+        givenSuccessfulDevelopment();
+        // The developer agent is mocked, so the container output of the run is produced here: what
+        // matters is that whatever the sandbox printed during a step ends up in that step's log.
+        when(developerAgent.implement(any(), any(), anyInt(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    StepLogs.current(workflow.getId()).line("[INFO] BUILD SUCCESS");
+                    return new DevelopmentResult(true, List.of("Fee.java"), "done", List.of());
+                });
+
+        engine.advance(workflow.getId());
+
+        ArgumentCaptor<WorkflowStepLogEntity> captor = ArgumentCaptor.forClass(WorkflowStepLogEntity.class);
+        verify(stepLogRepository, times(countSteps())).save(captor.capture());
+        assertThat(captor.getAllValues()).allSatisfy(entity -> assertThat(entity.text()).startsWith("=== step"));
+        assertThat(captor.getAllValues()).anySatisfy(entity -> assertThat(entity.text()).contains("[INFO] BUILD SUCCESS"));
+    }
+
+    @Test
+    @DisplayName("a step that throws still stores its log, which is the one worth reading")
+    void shouldStoreTheLogOfAFailedStep() {
+        givenAnalysableTicket();
+        when(rulesLoader.loadContext(eq(PROJECT), anyString())).thenAnswer(invocation -> {
+            StepLogs.current(workflow.getId()).line("fatal: repository not found");
+            throw new IllegalStateException("GitLab refused the repository");
+        });
+
+        engine.advance(workflow.getId());
+
+        assertThat(workflow.getStatus()).isEqualTo(WorkflowStatus.FAILED);
+        ArgumentCaptor<WorkflowStepLogEntity> captor = ArgumentCaptor.forClass(WorkflowStepLogEntity.class);
+        verify(stepLogRepository, atLeastOnce()).save(captor.capture());
+        assertThat(captor.getAllValues())
+                .anySatisfy(entity -> assertThat(entity.text()).contains("fatal: repository not found"));
     }
 
     /** Number of steps the happy path executes, taken from the steps actually begun. */

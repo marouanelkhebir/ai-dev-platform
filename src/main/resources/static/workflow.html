@@ -290,6 +290,14 @@
             <div class="panel-body" id="sandbox"></div>
           </section>
 
+          <section class="panel step-logs" id="stepLogsPanel" hidden>
+            <div class="panel-head">
+              <div><h2>Logs complets des étapes</h2><p>Tout ce que le conteneur et la plateforme ont écrit, étape par étape.</p></div>
+              <button class="secondary" id="downloadLogs">Télécharger tout (.gz)</button>
+            </div>
+            <div class="panel-body" id="stepLogs"></div>
+          </section>
+
           <section class="panel">
             <div class="panel-head"><div><h2>Exécutions des agents</h2><p>Ouvrez une exécution pour voir la réponse de l’IA et ses outils.</p></div></div>
             <div class="panel-body"><div class="execution-list" id="executions"></div></div>
@@ -429,6 +437,7 @@
       renderTimeline();
       renderClarification();
       renderSandbox();
+      renderStepLogs();
       renderExecutions();
     }
 
@@ -610,6 +619,71 @@
       const output = state.detail.testReport?.rawOutputExcerpt;
       $('#sandboxPanel').hidden = !output;
       if (output) $('#sandbox').innerHTML = logOutput(output);
+    }
+
+    const formatSize = bytes => bytes < 1024 ? `${bytes} o`
+      : bytes < 1048576 ? `${(bytes / 1024).toFixed(0)} Ko` : `${(bytes / 1048576).toFixed(1).replace('.', ',')} Mo`;
+
+    /**
+     * One collapsible entry per step. The log itself is fetched only when the entry is opened:
+     * a single step can weigh megabytes, and a run has a dozen of them.
+     */
+    function renderStepLogs() {
+      const logs = state.detail.stepLogs || [];
+      const steps = state.detail.steps || [];
+      $('#stepLogsPanel').hidden = !logs.length;
+      if (!logs.length) return;
+
+      $('#stepLogs').innerHTML = [...logs].reverse().map(entry => {
+        const step = steps.find(candidate => candidate.sequence === entry.sequence);
+        const label = step ? (step.from || '').replaceAll('_', ' ') : `Étape ${entry.sequence}`;
+        const key = `steplog/${entry.sequence}`;
+        const size = `${formatSize(entry.compressedBytes)} compressés · ${entry.characters.toLocaleString('fr-FR')} caractères`;
+        return `<details class="tool-log" data-log-key="${escape(key)}" data-sequence="${entry.sequence}" ${openLogs.has(key) ? 'open' : ''}>
+          <summary><span>${escape(`${entry.sequence}. ${label}`)}${entry.truncated ? ' · tronqué' : ''}</span><span>${escape(size)}</span></summary>
+          <pre class="log-output" data-role="content">Chargement…</pre>
+        </details>`;
+      }).join('');
+
+      $('#stepLogs').querySelectorAll('details[data-sequence]').forEach(details => {
+        if (details.open) loadStepLog(details);
+        details.addEventListener('toggle', () => { if (details.open) loadStepLog(details); });
+      });
+    }
+
+    async function loadStepLog(details) {
+      if (details.dataset.loaded) return;
+      details.dataset.loaded = 'true';
+      const target = details.querySelector('[data-role="content"]');
+      try {
+        const response = await fetch(
+          `/api/workflows/${encodeURIComponent(state.id)}/steps/${details.dataset.sequence}/logs`,
+          {headers: {'X-Api-Key': state.key}});
+        if (!response.ok) throw new Error('Log indisponible.');
+        target.textContent = await response.text();
+      } catch (error) {
+        delete details.dataset.loaded;
+        target.textContent = error.message;
+      }
+    }
+
+    /** The API key travels in a header, so the download cannot be a plain link. */
+    async function downloadLogs() {
+      const button = $('#downloadLogs');
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/workflows/${encodeURIComponent(state.id)}/logs?download=true`,
+          {headers: {'X-Api-Key': state.key}});
+        if (!response.ok) throw new Error('Téléchargement impossible.');
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `workflow-${workflowLabel(state.detail.workflow)}.log.gz`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } finally {
+        button.disabled = false;
+      }
     }
 
     const openLogs = new Set();
@@ -800,6 +874,7 @@
     $('#connect').addEventListener('click', connect);
     $('#apiKey').addEventListener('keydown', event => { if (event.key === 'Enter') connect(); });
     $('#disconnect').addEventListener('click', () => { localStorage.removeItem('aidev-api-key'); window.location.href = '/'; });
+    $('#downloadLogs').addEventListener('click', downloadLogs);
 
     // A dropped stream must never leave a stale page behind: re-read on wake-up, and keep a slow
     // safety poll for the proxies that quietly swallow server-sent events.

@@ -25,7 +25,7 @@ class AsyncConfigTest {
     /** Pool of one with a queue of ten, so the twelfth submission has nowhere to go. */
     private final ThreadPoolTaskExecutor executor = (ThreadPoolTaskExecutor) new AsyncConfig()
             .workflowExecutor(
-                    new WorkflowProperties(null, null, null, null, null, null, 1, null, null, null));
+                    new WorkflowProperties(null, null, null, null, null, null, 1, null, null, null, null));
 
     private final CountDownLatch release = new CountDownLatch(1);
 
