@@ -16,7 +16,8 @@
     button:disabled { cursor:not-allowed; opacity:.5; }
     button.secondary { background:#1a2a40; color:var(--text); }
     button.secondary:hover:not(:disabled) { background:#273b55; }
-    input,textarea { width:100%; border:1px solid #344a66; border-radius:10px; padding:11px 12px; color:var(--text); background:#081524; }
+    input,textarea,select { width:100%; border:1px solid #344a66; border-radius:10px; padding:11px 12px; color:var(--text); background:#081524; }
+    select { font:inherit; }
     textarea { min-height:126px; resize:vertical; line-height:1.45; }
     input::placeholder,textarea::placeholder { color:var(--subtle); }
     a { color:inherit; }
@@ -119,6 +120,7 @@
     <div class="layout">
       <nav class="rail" aria-label="Navigation principale">
         <a class="nav-item active" href="/" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/></svg>Workflows</a>
+        <a class="nav-item" href="/projects.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>Projets</a>
         <a class="nav-item" href="/settings.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="m19.4 15 .1 1.4-1.7 2.1-1.4-.5a7.3 7.3 0 0 1-1.5.9l-.3 1.4-2.7.4-.7-1.3a7.8 7.8 0 0 1-1.7-.4l-1.1.9-2.4-1.3.2-1.5a7 7 0 0 1-1.1-1.3l-1.4-.1-.7-2.6 1.1-.9a7 7 0 0 1 .2-1.7l-1-1.1L6 7.1l1.4.2a7 7 0 0 1 1.3-1l.1-1.5 2.6-.7.9 1.1a7 7 0 0 1 1.7.2l1.1-1 2.3 1.3-.2 1.4a7 7 0 0 1 1.1 1.4l1.4.1.7 2.6-1.1.9a7 7 0 0 1-.2 1.8Z"/></svg>Paramètres</a>
         <aside class="rail-note"><strong>Contrôle humain</strong>La fusion reste une action manuelle dans GitLab, même après approbation.</aside>
       </nav>
@@ -126,14 +128,14 @@
         <div class="page-heading"><div><h1>Suivez chaque changement, du ticket à la revue.</h1><p class="intro">Lancez un workflow depuis Jira ou décrivez directement votre besoin, puis ouvrez-le pour suivre les décisions des agents en direct.</p></div><button class="secondary" id="refresh">Actualiser</button></div>
         <div class="workspace">
           <section class="panel list-panel"><div class="panel-head"><div><h2>Workflows récents</h2><p id="workflowCount">Chargement…</p></div><span class="live" id="live" hidden><span class="live-dot"></span><span id="liveLabel">Connexion au flux…</span></span></div><div class="workflow-list" id="workflowList"></div></section>
-          <aside class="panel create-panel"><h2>Nouveau workflow</h2><p>Choisissez une source puis lancez le traitement.</p><form id="createForm"><div class="source-switch" role="group" aria-label="Source de la demande"><button type="button" data-source="jira" aria-pressed="true">Ticket Jira</button><button type="button" data-source="message" aria-pressed="false">Message direct</button></div><div class="source-fields" id="jiraFields"><div class="field"><label for="ticket">Ticket Jira</label><input id="ticket" required pattern="[A-Z][A-Z0-9_]+-[0-9]+" placeholder="BANK-1245"><small>Ex. : BANK-1245</small></div></div><div class="source-fields" id="messageFields" hidden><div class="field"><label for="directMessage">Votre demande</label><textarea id="directMessage" maxlength="50000" placeholder="Décrivez le changement attendu, le contexte et les critères de réussite."></textarea><small>Ajoutez les contraintes et les critères d’acceptation utiles.</small></div></div><div class="field"><label for="project">Projet GitLab</label><input id="project" required placeholder="groupe/mon-projet"><small>Chemin GitLab ou identifiant numérique</small></div><button type="submit" id="createButton">Lancer le workflow</button><p class="message" id="createMessage" aria-live="polite"></p></form></aside>
+          <aside class="panel create-panel"><h2>Nouveau workflow</h2><p>Choisissez une source puis lancez le traitement.</p><form id="createForm"><div class="source-switch" role="group" aria-label="Source de la demande"><button type="button" data-source="jira" aria-pressed="true">Ticket Jira</button><button type="button" data-source="message" aria-pressed="false">Message direct</button></div><div class="source-fields" id="jiraFields"><div class="field"><label for="ticket">Ticket Jira</label><input id="ticket" required pattern="[A-Z][A-Z0-9_]+-[0-9]+" placeholder="BANK-1245"><small>Ex. : BANK-1245</small></div></div><div class="source-fields" id="messageFields" hidden><div class="field"><label for="directMessage">Votre demande</label><textarea id="directMessage" maxlength="50000" placeholder="Décrivez le changement attendu, le contexte et les critères de réussite."></textarea><small>Ajoutez les contraintes et les critères d’acceptation utiles.</small></div></div><div class="field"><label for="project">Projet</label><select id="project" required></select><small>Le dépôt GitLab, la clé Jira et l’image Docker viennent du projet. <a href="/projects.html">Gérer les projets</a></small></div><button type="submit" id="createButton">Lancer le workflow</button><p class="message" id="createMessage" aria-live="polite"></p></form></aside>
         </div>
       </main>
     </div>
   </div>
   <script>
     const $ = selector => document.querySelector(selector);
-    const state = { key: localStorage.getItem('aidev-api-key') || '', workflows: [], source: 'jira', stream: null, retries: 0 };
+    const state = { key: localStorage.getItem('aidev-api-key') || '', workflows: [], projects: [], source: 'jira', stream: null, retries: 0 };
     const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
     const headers = () => ({ 'X-Api-Key': state.key, 'Content-Type': 'application/json' });
     const formatDate = date => date ? new Intl.DateTimeFormat('fr-FR', {dateStyle:'medium', timeStyle:'short'}).format(new Date(date)) : '—';
@@ -143,7 +145,25 @@
     const detailUrl = workflow => `/workflow.html?id=${encodeURIComponent(workflow.id)}`;
     async function request(url, options = {}) { const response = await fetch(url, {...options, headers:{...headers(), ...(options.headers || {})}}); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || 'La requête a échoué.'); return body; }
 
-    const rowContent = workflow => `<span class="workflow-ticket">${escape(workflowLabel(workflow))}</span><span class="workflow-project">${escape(workflow.gitlabProject)}</span>${status(workflow.status)}<span class="workflow-date">${formatDate(workflow.updatedAt)}</span><span class="arrow" aria-hidden="true">›</span>`;
+    const projectName = workflow => (state.projects.find(project => project.id === workflow.projectId) || {}).name || workflow.gitlabProject;
+    const rowContent = workflow => `<span class="workflow-ticket">${escape(workflowLabel(workflow))}</span><span class="workflow-project">${escape(projectName(workflow))}</span>${status(workflow.status)}<span class="workflow-date">${formatDate(workflow.updatedAt)}</span><span class="arrow" aria-hidden="true">›</span>`;
+
+    /**
+     * Loads the projects a workflow can be started from.
+     *
+     * <p>Only the startable ones: offering an archived project would let a human choose an option
+     * the API is going to refuse.
+     */
+    async function loadProjects() {
+      const page = await request('/api/projects?activeOnly=true&size=100');
+      state.projects = page.content || [];
+      const select = $('#project');
+      select.innerHTML = state.projects.length
+        ? state.projects.map(project => `<option value="${escape(project.id)}">${escape(project.name)} — ${escape(project.gitlabProject)}</option>`).join('')
+        : '<option value="">Aucun projet actif</option>';
+      $('#createButton').disabled = state.projects.length === 0;
+      if (!state.projects.length) { $('#createMessage').className = 'message error'; $('#createMessage').textContent = 'Créez d’abord un projet.'; }
+    }
 
     function renderList() {
       const list = $('#workflowList');
@@ -215,11 +235,11 @@
       setTimeout(() => { loadWorkflows().catch(() => {}); openStream(); }, Math.min(1000 * 2 ** (state.retries - 1), 15000));
     }
 
-    async function connect() { const key = $('#apiKey').value.trim(); if (!key) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = 'Saisissez la clé API de la plateforme.'; return; } state.key = key; $('#setupMessage').textContent = 'Vérification…'; try { await request('/api/workflows?size=1'); localStorage.setItem('aidev-api-key', key); $('#setup').remove(); $('#app').hidden = false; $('#keyState').classList.add('connected'); $('#keyState').textContent = 'Connecté'; await loadWorkflows(); openStream(); } catch (error) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = error.message; } }
+    async function connect() { const key = $('#apiKey').value.trim(); if (!key) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = 'Saisissez la clé API de la plateforme.'; return; } state.key = key; $('#setupMessage').textContent = 'Vérification…'; try { await request('/api/workflows?size=1'); localStorage.setItem('aidev-api-key', key); $('#setup').remove(); $('#app').hidden = false; $('#keyState').classList.add('connected'); $('#keyState').textContent = 'Connecté'; await loadProjects(); await loadWorkflows(); openStream(); } catch (error) { $('#setupMessage').className = 'message error'; $('#setupMessage').textContent = error.message; } }
     function setSource(source) { state.source = source; const direct = source === 'message'; $('#jiraFields').hidden = direct; $('#messageFields').hidden = !direct; $('#ticket').required = !direct; $('#directMessage').required = direct; document.querySelectorAll('[data-source]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.source === source))); $('#createMessage').textContent = ''; }
     $('#connect').addEventListener('click', connect); $('#apiKey').addEventListener('keydown', event => { if (event.key === 'Enter') connect(); }); $('#refresh').addEventListener('click', () => loadWorkflows().catch(() => {})); $('#disconnect').addEventListener('click', () => { localStorage.removeItem('aidev-api-key'); window.location.reload(); }); document.querySelectorAll('[data-source]').forEach(button => button.addEventListener('click', () => setSource(button.dataset.source)));
     document.addEventListener('visibilitychange', () => { if (!document.hidden && state.key && !$('#app').hidden) loadWorkflows().catch(() => {}); });
-    $('#createForm').addEventListener('submit', async event => { event.preventDefault(); const message = $('#createMessage'); message.className = 'message'; message.textContent = 'Création…'; const button = $('#createButton'); button.disabled = true; try { const direct = state.source === 'message'; const workflow = await request(direct ? '/api/workflows/message' : '/api/workflows', {method:'POST', body:JSON.stringify(direct ? {message:$('#directMessage').value.trim(), gitlabProjectId:$('#project').value.trim()} : {jiraTicket:$('#ticket').value.trim().toUpperCase(), gitlabProjectId:$('#project').value.trim()})}); message.textContent = `Workflow ${workflowLabel(workflow)} lancé, ouverture du suivi…`; window.location.href = detailUrl(workflow); } catch (error) { message.className = 'message error'; message.textContent = error.message; button.disabled = false; } });
+    $('#createForm').addEventListener('submit', async event => { event.preventDefault(); const message = $('#createMessage'); message.className = 'message'; message.textContent = 'Création…'; const button = $('#createButton'); button.disabled = true; try { const direct = state.source === 'message'; const projectId = $('#project').value; const base = `/api/projects/${encodeURIComponent(projectId)}/workflows`; const workflow = await request(direct ? `${base}/message` : base, {method:'POST', body:JSON.stringify(direct ? {message:$('#directMessage').value.trim()} : {jiraTicket:$('#ticket').value.trim().toUpperCase()})}); message.textContent = `Workflow ${workflowLabel(workflow)} lancé, ouverture du suivi…`; window.location.href = detailUrl(workflow); } catch (error) { message.className = 'message error'; message.textContent = error.message; button.disabled = false; } });
     if (state.key) { $('#apiKey').value = state.key; connect(); }
   </script>
 </body>

@@ -6,17 +6,23 @@ analysis that the rest of the team can build on.
 # Absolute rules
 
 1. **Never invent a business rule.** If the ticket does not say it, it does not exist. A plausible
-   assumption is still an invention.
+   assumption is still an invention. You may, however, formulate a *derived verification criterion*
+   when it is a direct, observable restatement of an explicit requested behaviour (for example,
+   "add a startup greeting to the API console" becomes "on API startup, the configured greeting is
+   written once to the application log").
 2. **Use repository evidence before asking.** Before reporting an ambiguity, use the retrieved repository
    context and its read-only tools to settle technical questions that the code answers (the owning
    template, existing conventions, affected modules, or whether a value is site-wide). Do not ask a
    human to choose an implementation detail that repository evidence can establish. Report only a
    genuinely missing or conflicting business rule.
-3. Acceptance criteria come from the ticket. Do not create new ones, do not reword them into
-   something weaker or stronger, do not merge two into one.
-4. If a Jira ticket has no acceptance criteria at all, say so in `ambiguities`. A direct request
-   has no Jira acceptance-criteria field: do not report their absence as an ambiguity; only report
-   an actual missing business rule or unclear expected behaviour.
+3. Use explicit acceptance criteria verbatim whenever the ticket provides them. When it provides
+   none, derive a small set of testable acceptance criteria from the requested behaviour and the
+   repository evidence. They must be no stronger or broader than the ticket: state the observable
+   outcome, relevant scope, and explicit constraints only. Do not add speculative edge cases,
+   business rules, or implementation choices.
+4. A missing Jira acceptance-criteria field is not, by itself, an ambiguity. Report an ambiguity
+   only when the requested behaviour, scope, or constraint cannot be established from the ticket,
+   its linked issues, and repository evidence. A direct request follows the same rule.
 5. Quote the ticket when you can. Your analysis must be traceable.
 
 # What counts as an ambiguity
@@ -54,7 +60,7 @@ fence.
   "ticketId": "BANK-1245",
   "objective": "One sentence stating what must change from a business point of view.",
   "acceptanceCriteria": [
-    "Exact criterion as written in the ticket",
+    "Exact criterion as written in the ticket, or a directly derived observable criterion when none are provided",
     "..."
   ],
   "impactedServices": ["customer-management", "fee-engine"],

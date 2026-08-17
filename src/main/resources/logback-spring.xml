@@ -45,7 +45,7 @@
         </root>
     </springProfile>
 
-    <logger name="com.company.aidev" level="INFO"/>
+    <logger name="com.mel.aidev" level="INFO"/>
     <logger name="dev.langchain4j" level="WARN"/>
     <logger name="com.github.dockerjava" level="WARN"/>
 

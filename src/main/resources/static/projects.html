@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Projets — AI Dev Platform</title>
+  <style>
+    :root { --page:#07101c; --surface:#0c1827; --line:#243750; --text:#edf4fc; --muted:#9aabc0; --subtle:#74869d; --accent:#66e0ad; --accent-ink:#042518; --warning:#f4be67; --danger:#ff929a; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:320px; color:var(--text); background:var(--page); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button,input,textarea,select { font:inherit; }
+    button { border:0; border-radius:10px; padding:10px 14px; background:var(--accent); color:var(--accent-ink); font-weight:750; cursor:pointer; transition:transform .16s ease,background .16s ease; }
+    button:hover:not(:disabled) { transform:translateY(-1px); background:#85e8bf; }
+    button:disabled { cursor:not-allowed; opacity:.5; }
+    button.secondary { background:#1a2a40; color:var(--text); }
+    button.secondary:hover:not(:disabled) { background:#273b55; }
+    button.danger { background:#4a2028; color:#ffd0d4; }
+    button.danger:hover:not(:disabled) { background:#5d2833; }
+    button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,a:focus-visible { outline:3px solid #80bfff80; outline-offset:2px; }
+    input,textarea,select { width:100%; border:1px solid #344a66; border-radius:10px; padding:11px 12px; color:var(--text); background:#081524; }
+    textarea { min-height:84px; resize:vertical; }
+    a { color:inherit; }
+    h1,h2,h3,p { margin:0; }
+    h1 { font-size:clamp(26px,3.4vw,36px); line-height:1.1; letter-spacing:-.035em; }
+    h2 { font-size:18px; letter-spacing:-.02em; }
+    [hidden] { display:none!important; }
+    .shell { max-width:1440px; min-height:100vh; margin:auto; padding:0 30px 44px; }
+    .topbar { min-height:86px; display:flex; align-items:center; justify-content:space-between; gap:24px; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:12px; text-decoration:none; }
+    .brand-mark { display:grid; width:30px; height:30px; place-items:center; border-radius:9px; background:var(--accent); color:#062519; font-weight:900; letter-spacing:-.08em; }
+    .brand strong { display:block; font-size:16px; letter-spacing:-.025em; }
+    .brand span span { color:var(--muted); font-size:12px; }
+    .layout { display:grid; grid-template-columns:245px minmax(0,1fr); gap:32px; padding-top:32px; }
+    .rail { display:flex; flex-direction:column; gap:8px; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; color:var(--muted); text-decoration:none; font-weight:650; }
+    .nav-item:hover { color:var(--text); background:#102037; }
+    .nav-item.active { color:var(--text); background:#13243a; }
+    .nav-icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+    .rail-note { margin-top:26px; padding:16px; border:1px solid var(--line); border-radius:14px; color:var(--muted); font-size:13px; }
+    .rail-note strong { display:block; color:var(--text); margin-bottom:4px; }
+    .content { min-width:0; }
+    .page-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin:7px 0 24px; }
+    .intro { max-width:650px; margin-top:9px; color:var(--muted); }
+    .toolbar { display:flex; gap:12px; align-items:center; margin-bottom:18px; }
+    .toolbar input { max-width:340px; }
+    .toolbar label { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:13px; white-space:nowrap; }
+    .toolbar input[type="checkbox"] { width:auto; }
+    .panel { border:1px solid var(--line); border-radius:15px; background:var(--surface); overflow:hidden; }
+    .row { display:grid; grid-template-columns:minmax(160px,1.3fr) minmax(150px,1.2fr) 90px minmax(120px,1fr) 110px max-content; align-items:center; gap:16px; padding:16px 20px; border-bottom:1px solid #1c2c42; }
+    .row:last-child { border-bottom:0; }
+    .row:hover { background:#102037; }
+    .row-head { color:var(--muted); font-size:12px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; background:#0a1626; }
+    .row-head:hover { background:#0a1626; }
+    .name { font-weight:800; letter-spacing:-.01em; text-decoration:none; }
+    .name small { display:block; color:var(--muted); font-weight:500; font-size:12px; }
+    .mono { color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .num { font-variant-numeric:tabular-nums; }
+    .pill { display:inline-flex; width:max-content; align-items:center; gap:7px; border-radius:999px; padding:4px 9px; font-size:12px; font-weight:800; color:#c6f5da; background:#164430; }
+    .pill.archived { color:#c5d1df; background:#26384c; }
+    .actions { display:flex; gap:8px; }
+    .actions button { padding:7px 10px; font-size:13px; }
+    .empty { display:grid; min-height:220px; place-items:center; padding:36px; text-align:center; color:var(--muted); }
+    .empty strong { display:block; color:var(--text); margin-bottom:5px; }
+    dialog { width:min(680px,94vw); border:1px solid var(--line); border-radius:16px; padding:24px; color:var(--text); background:var(--surface); }
+    dialog::backdrop { background:#04080ecc; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .field { margin-top:14px; }
+    .field label { display:block; margin-bottom:6px; font-size:13px; font-weight:750; }
+    .field small { display:block; margin-top:5px; color:var(--muted); font-size:12px; }
+    .dialog-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
+    .message { min-height:20px; margin-top:12px; color:var(--muted); font-size:13px; }
+    .message.error { color:var(--danger); }
+    .setup { display:grid; min-height:100vh; place-items:center; padding:24px; }
+    .setup-card { width:min(500px,100%); padding:32px; border:1px solid var(--line); border-radius:18px; background:var(--surface); }
+    @media (max-width:980px) { .layout { grid-template-columns:1fr; }.rail { flex-direction:row; flex-wrap:wrap; }.rail-note { display:none; }.row { grid-template-columns:1fr auto; gap:6px 12px; }.row-head { display:none; }.grid2 { grid-template-columns:1fr; } }
+    @media (max-width:640px) { .shell { padding:0 17px 30px; } }
+    @media (prefers-reduced-motion:reduce) { * { transition-duration:.001ms!important; } }
+  </style>
+</head>
+<body>
+  <section class="setup" id="setup">
+    <div class="setup-card">
+      <a class="brand" href="/"><span class="brand-mark">AI</span><span><strong>AI Dev Platform</strong><span>Console de pilotage</span></span></a>
+      <p class="message" id="setupMessage" aria-live="polite">Clé API requise. <a href="/">Retour à la console</a></p>
+    </div>
+  </section>
+  <div class="shell" id="app" hidden>
+    <header class="topbar"><a class="brand" href="/"><span class="brand-mark">AI</span><span><strong>AI Dev Platform</strong><span>Console de pilotage</span></span></a><div><button class="secondary" id="disconnect">Déconnecter</button></div></header>
+    <div class="layout">
+      <nav class="rail" aria-label="Navigation principale">
+        <a class="nav-item" href="/"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z"/></svg>Workflows</a>
+        <a class="nav-item active" href="/projects.html" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>Projets</a>
+        <a class="nav-item" href="/settings.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/></svg>Paramètres</a>
+        <aside class="rail-note"><strong>Archiver plutôt que supprimer</strong>Un projet archivé ne démarre plus de workflow mais garde tout son historique. La suppression n’est possible qu’à zéro workflow.</aside>
+      </nav>
+      <main class="content">
+        <div class="page-heading"><div><h1>Projets</h1><p class="intro">Un projet porte son dépôt GitLab, sa clé Jira, son image Docker et sa configuration d’exécution. Chaque workflow en hérite.</p></div><button id="newProject">Nouveau projet</button></div>
+        <div class="toolbar">
+          <input id="search" type="search" placeholder="Rechercher un nom, un dépôt, une clé Jira" aria-label="Rechercher">
+          <label><input type="checkbox" id="activeOnly"> Actifs seulement</label>
+          <button class="secondary" id="refresh">Actualiser</button>
+        </div>
+        <section class="panel">
+          <div class="row row-head"><span>Projet</span><span>Dépôt GitLab</span><span>Jira</span><span>Image</span><span>Workflows</span><span>Statut</span></div>
+          <div id="projectList"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="projectDialog">
+    <form id="projectForm" method="dialog">
+      <h2 id="dialogTitle">Nouveau projet</h2>
+      <div class="grid2">
+        <div class="field"><label for="f-name">Nom</label><input id="f-name" required maxlength="128" placeholder="Banque — gestion client"><small>Unique sur la plateforme</small></div>
+        <div class="field"><label for="f-gitlab">Dépôt GitLab</label><input id="f-gitlab" required placeholder="bank/customer-management"><small>Chemin ou identifiant numérique</small></div>
+        <div class="field"><label for="f-jira">Clé Jira</label><input id="f-jira" placeholder="BANK" maxlength="32"><small>Vide : le projet n’accepte que des demandes libres</small></div>
+        <div class="field"><label for="f-image">Image Docker</label><input id="f-image" placeholder="registry.example.com/team/image@sha256:…"><small>Vide : image globale du profil détecté</small></div>
+        <div class="field"><label for="f-branch">Branche cible</label><input id="f-branch" placeholder="main"><small>Vide : branche par défaut du dépôt</small></div>
+        <div class="field"><label for="f-prefix">Préfixe des branches IA</label><input id="f-prefix" placeholder="ai/"><small>Vide : préfixe global</small></div>
+      </div>
+      <div class="field"><label for="f-description">Description</label><textarea id="f-description" maxlength="2000"></textarea></div>
+      <p class="message" id="dialogMessage" aria-live="polite"></p>
+      <div class="dialog-actions"><button type="button" class="secondary" id="cancelDialog">Annuler</button><button type="submit" id="saveProject">Créer</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="cloneDialog">
+    <form id="cloneForm" method="dialog">
+      <h2>Cloner le projet</h2>
+      <p class="intro" id="cloneSource"></p>
+      <div class="field"><label for="c-name">Nom du clone</label><input id="c-name" required maxlength="128"></div>
+      <div class="grid2">
+        <div class="field"><label for="c-gitlab">Dépôt GitLab</label><input id="c-gitlab" placeholder="identique à la source"></div>
+        <div class="field"><label for="c-jira">Clé Jira</label><input id="c-jira" placeholder="identique à la source"></div>
+      </div>
+      <div class="field"><label for="c-image">Image Docker</label><input id="c-image" placeholder="identique à la source"></div>
+      <small>Configuration, variables et modèles sont copiés. Aucun workflow ne l’est.</small>
+      <p class="message" id="cloneMessage" aria-live="polite"></p>
+      <div class="dialog-actions"><button type="button" class="secondary" id="cancelClone">Annuler</button><button type="submit" id="saveClone">Cloner</button></div>
+    </form>
+  </dialog>
+
+  <script>
+    const $ = selector => document.querySelector(selector);
+    const state = { key: localStorage.getItem('aidev-api-key') || '', projects: [], cloneId: null };
+    const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+    const headers = () => ({ 'X-Api-Key': state.key, 'Content-Type': 'application/json' });
+    const formatDate = date => date ? new Intl.DateTimeFormat('fr-FR', {dateStyle:'short'}).format(new Date(date)) : '—';
+    async function request(url, options = {}) {
+      const response = await fetch(url, {...options, headers:{...headers(), ...(options.headers || {})}});
+      if (response.status === 204) return null;
+      const body = await response.json().catch(() => ({}));
+      // The API answers 422 with the reasons in `details`; showing only the headline would hide
+      // exactly the part a human needs to fix the form.
+      if (!response.ok) throw new Error([body.message, ...(body.details || [])].filter(Boolean).join(' · ') || 'La requête a échoué.');
+      return body;
+    }
+
+    function rowFor(project) {
+      return `<div class="row" data-id="${escape(project.id)}">
+        <a class="name" href="/project.html?id=${encodeURIComponent(project.id)}">${escape(project.name)}<small>créé le ${formatDate(project.createdAt)}</small></a>
+        <span class="mono">${escape(project.gitlabProject)}</span>
+        <span class="mono">${escape(project.jiraProjectKey || '—')}</span>
+        <span class="mono">${escape(project.dockerImage || 'image globale')}</span>
+        <span class="num">${project.workflowCount}${project.lastWorkflowAt ? ` <span class="mono">· ${formatDate(project.lastWorkflowAt)}</span>` : ''}</span>
+        <span class="actions">
+          <span class="pill ${project.active ? '' : 'archived'}">${project.active ? 'Actif' : 'Archivé'}</span>
+          <button class="secondary" data-action="clone">Cloner</button>
+          <button class="${project.active ? 'secondary' : ''}" data-action="${project.active ? 'archive' : 'restore'}">${project.active ? 'Archiver' : 'Réactiver'}</button>
+          ${project.workflowCount === 0 ? '<button class="danger" data-action="delete">Supprimer</button>' : ''}
+        </span>
+      </div>`;
+    }
+
+    function render() {
+      const list = $('#projectList');
+      list.innerHTML = state.projects.length
+        ? state.projects.map(rowFor).join('')
+        : '<div class="empty"><div><strong>Aucun projet</strong>Créez-en un pour pouvoir lancer des workflows.</div></div>';
+    }
+
+    async function load() {
+      $('#refresh').disabled = true;
+      try {
+        const query = new URLSearchParams({ size: '100', activeOnly: String($('#activeOnly').checked) });
+        if ($('#search').value.trim()) query.set('q', $('#search').value.trim());
+        const page = await request(`/api/projects?${query}`);
+        state.projects = page.content || [];
+        render();
+      } catch (error) {
+        $('#projectList').innerHTML = `<div class="empty"><div><strong>Chargement impossible</strong>${escape(error.message)}</div></div>`;
+      } finally { $('#refresh').disabled = false; }
+    }
+
+    function openCreate() {
+      $('#projectForm').reset();
+      $('#dialogMessage').textContent = '';
+      $('#projectDialog').showModal();
+    }
+
+    $('#projectForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const message = $('#dialogMessage');
+      message.className = 'message';
+      message.textContent = 'Vérification du dépôt, de la clé Jira et de l’image…';
+      $('#saveProject').disabled = true;
+      try {
+        await request('/api/projects', { method:'POST', body: JSON.stringify({
+          name: $('#f-name').value.trim(),
+          description: $('#f-description').value.trim() || null,
+          gitlabProject: $('#f-gitlab').value.trim(),
+          jiraProjectKey: $('#f-jira').value.trim() || null,
+          dockerImage: $('#f-image').value.trim() || null,
+          defaultBranch: $('#f-branch').value.trim() || null,
+          branchPrefix: $('#f-prefix').value.trim() || null,
+          active: true
+        })});
+        $('#projectDialog').close();
+        await load();
+      } catch (error) { message.className = 'message error'; message.textContent = error.message; }
+      finally { $('#saveProject').disabled = false; }
+    });
+
+    $('#cloneForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const message = $('#cloneMessage');
+      message.className = 'message';
+      message.textContent = 'Clonage…';
+      $('#saveClone').disabled = true;
+      try {
+        await request(`/api/projects/${encodeURIComponent(state.cloneId)}/clone`, { method:'POST', body: JSON.stringify({
+          name: $('#c-name').value.trim(),
+          gitlabProject: $('#c-gitlab').value.trim() || null,
+          jiraProjectKey: $('#c-jira').value.trim() || null,
+          dockerImage: $('#c-image').value.trim() || null
+        })});
+        $('#cloneDialog').close();
+        await load();
+      } catch (error) { message.className = 'message error'; message.textContent = error.message; }
+      finally { $('#saveClone').disabled = false; }
+    });
+
+    $('#projectList').addEventListener('click', async event => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      const id = button.closest('.row').dataset.id;
+      const project = state.projects.find(candidate => candidate.id === id);
+      if (button.dataset.action === 'clone') {
+        state.cloneId = id;
+        $('#cloneForm').reset();
+        $('#cloneMessage').textContent = '';
+        $('#cloneSource').textContent = `Source : ${project.name} — ${project.gitlabProject}`;
+        $('#c-name').value = `${project.name} (copie)`;
+        $('#cloneDialog').showModal();
+        return;
+      }
+      if (button.dataset.action === 'delete' && !confirm(`Supprimer définitivement « ${project.name} » ?`)) return;
+      button.disabled = true;
+      try {
+        if (button.dataset.action === 'archive') await request(`/api/projects/${encodeURIComponent(id)}`, {method:'DELETE'});
+        else if (button.dataset.action === 'restore') await request(`/api/projects/${encodeURIComponent(id)}/restore`, {method:'POST'});
+        else await request(`/api/projects/${encodeURIComponent(id)}?force=true`, {method:'DELETE'});
+        await load();
+      } catch (error) { alert(error.message); button.disabled = false; }
+    });
+
+    $('#newProject').addEventListener('click', openCreate);
+    $('#cancelDialog').addEventListener('click', () => $('#projectDialog').close());
+    $('#cancelClone').addEventListener('click', () => $('#cloneDialog').close());
+    $('#refresh').addEventListener('click', load);
+    $('#activeOnly').addEventListener('change', load);
+    let searchTimer;
+    $('#search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(load, 250); });
+    $('#disconnect').addEventListener('click', () => { localStorage.removeItem('aidev-api-key'); window.location.href = '/'; });
+
+    if (state.key) { $('#setup').remove(); $('#app').hidden = false; load(); }
+  </script>
+</body>
+</html>

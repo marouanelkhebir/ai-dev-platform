@@ -265,7 +265,7 @@
 
           <section class="panel">
             <div class="panel-head"><div><h2>Identité du workflow</h2><p>Ce que l’orchestrateur a écrit sur ce ticket.</p></div></div>
-            <div class="panel-body"><div class="facts" id="facts"></div><div class="request" id="request" hidden></div><p class="message error" id="failureReason" hidden></p></div>
+            <div class="panel-body"><div class="facts" id="facts"></div><div class="request" id="request" hidden></div><p class="message" id="purged" hidden></p><p class="message error" id="failureReason" hidden></p></div>
           </section>
 
           <section class="panel clarification" id="clarificationPanel" hidden></section>
@@ -434,7 +434,11 @@
     function renderHeader() {
       const workflow = state.detail.workflow;
       $('#title').textContent = workflowLabel(workflow);
-      $('#subtitle').innerHTML = `${escape(workflow.gitlabProject)}<span class="sep">·</span>créé le ${formatDate(workflow.createdAt)}`;
+      const project = workflow.projectId
+        ? `<a href="/project.html?id=${encodeURIComponent(workflow.projectId)}">${escape(workflow.gitlabProject)}</a>`
+        : escape(workflow.gitlabProject);
+      $('#subtitle').innerHTML = `${project}<span class="sep">·</span>créé le ${formatDate(workflow.createdAt)}`
+        + (workflow.archivedAt ? '<span class="sep">·</span>archivé' : '');
 
       const pill = $('#statusPill');
       pill.className = `status ${statusClass(workflow.status)}`;
@@ -502,10 +506,20 @@
           ? `<a href="${escape(workflow.mergeRequestUrl)}" target="_blank" rel="noopener">Ouvrir !${escape(workflow.mergeRequestIid)}</a>`
           : 'Pas encore créée'],
         ['Profil de build', escape(workflow.buildProfile || 'Non détecté')],
+        // The image the sandbox actually ran, not the one the project configuration mentions today.
+        ['Image du bac à sable', escape(workflow.sandboxImage || 'Pas encore résolue')],
         ['Tentatives de développement', escape(workflow.developmentAttempts)],
         ['Rounds de revue', escape(workflow.reviewAttempts)]
       ];
       $('#facts').innerHTML = facts.map(([label, value]) => `<div class="fact"><span>${label}</span><strong>${value}</strong></div>`).join('');
+
+      // A purged workflow shows why its sections are empty rather than looking broken.
+      const purged = $('#purged');
+      purged.hidden = !workflow.purgedAt;
+      if (workflow.purgedAt) {
+        purged.textContent = `Détails purgés le ${formatDate(workflow.purgedAt)} par la politique de rétention du projet.`
+          + ' Les prompts, sorties de modèles et résultats d’outils ont été remplacés par un résumé d’audit.';
+      }
 
       // The request is prose, not a fact: it gets its own width instead of a ragged grid cell.
       const request = $('#request');

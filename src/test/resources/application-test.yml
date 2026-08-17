@@ -56,5 +56,5 @@ workflow:
 
 logging:
   level:
-    com.company.aidev: WARN
+    com.mel.aidev: WARN
     org.hibernate: WARN

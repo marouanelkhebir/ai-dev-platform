@@ -65,6 +65,9 @@ ai:
     log-requests: false
     log-responses: false
 
+  # Models a project may pin per role. Empty means only the four models below may be pinned.
+  allowed-models: []
+
   # Logical roles mapped to model names. Change the right-hand side to swap a model.
   models:
     analysis: ${MODEL_ANALYSIS:reasoning-model}
@@ -184,7 +187,13 @@ sandbox:
     - npm
     - node
     - python
+  # Registries a project image may come from. Empty means no restriction, which is what a
+  # deployment building its images locally needs; fill it in to turn the check into a real lock.
+  allowed-registries: []
+  # Set to true to demand registry/image@sha256:... and refuse any moving tag.
+  require-image-digest: false
   # Only these variables reach the container. No production credential is ever listed here.
+  # Projects may add non-sensitive variables on top; they cannot override these.
   environment:
     MAVEN_OPTS: "-Xmx2g -Djava.awt.headless=true"
     JAVA_TOOL_OPTIONS: "-Duser.timezone=UTC"
@@ -201,6 +210,15 @@ workflow:
   auto-start-from-jira-webhook: true
   # Automatic merge is not implemented in this version and must stay false.
   allow-auto-merge: false
+  # Prompts, raw model answers and tool results hold source code of the repository; they expire.
+  # The workflow row, its merge requests and the LLM cost accounting are kept, along with a
+  # compact audit summary written before anything is deleted. A project may override detail-days,
+  # including with 0 to keep its details forever.
+  retention:
+    enabled: true
+    detail-days: 90
+    batch-size: 200
+    cron: "0 30 3 * * *"
   scheduler:
     resume-interval: PT60S
     pipeline-poll-interval: PT120S
@@ -247,6 +265,6 @@ springdoc:
 
 logging:
   level:
-    com.company.aidev: INFO
+    com.mel.aidev: INFO
     dev.langchain4j: WARN
     org.springframework.web: INFO

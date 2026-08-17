@@ -314,7 +314,7 @@ Keeping the mapping on the ticket means a human can always see why the platform 
 | Status | When |
 |---|---|
 | `AI_IN_PROGRESS` | analysis succeeded, work started |
-| `AI_NEEDS_CLARIFICATION` | the ticket is ambiguous or has no acceptance criteria |
+| `AI_NEEDS_CLARIFICATION` | the ticket contains a genuine unresolved ambiguity |
 | `AI_READY_FOR_REVIEW` | all gates passed, a human is expected |
 | `AI_FAILED` | a retry budget was exhausted |
 
@@ -325,8 +325,10 @@ request.
 ### Acceptance criteria
 
 Read from the custom fields listed in `jira.acceptance-criteria-fields`, and, when those are empty,
-parsed from an "Acceptance criteria" section of the description. Both paths are covered by
-`RestJiraClientIT`.
+parsed from an "Acceptance criteria" section of the description. When neither is present, the Jira
+analyst derives narrow, observable criteria from the explicit request and repository evidence; it
+asks for clarification only when a business rule or expected behaviour is genuinely unclear. Both
+ticket extraction paths are covered by `RestJiraClientIT`.
 
 ### Webhook
 
@@ -538,12 +540,23 @@ The agents **never** modify these files — `WorkspacePaths.assertWritable` refu
 
 All `/api/**` calls require `X-Api-Key`.
 
+A workflow always belongs to a project, which owns the GitLab repository, the Jira key, the sandbox
+image and the execution configuration the workflow inherits.
+
 ```bash
-# Start a workflow
-curl -X POST localhost:8080/api/workflows \
+# Create a project
+curl -X POST localhost:8080/api/projects \
   -H "X-Api-Key: $PLATFORM_API_KEY" \
   -H 'Content-Type: application/json' \
-  -d '{"jiraTicket":"BANK-1245","gitlabProjectId":"bank/customer-management"}'
+  -d '{"name":"Bank — customers","gitlabProject":"bank/customer-management","jiraProjectKey":"BANK"}'
+```
+
+```bash
+# Start a workflow on that project
+curl -X POST localhost:8080/api/projects/$PROJECT_ID/workflows \
+  -H "X-Api-Key: $PLATFORM_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"jiraTicket":"BANK-1245"}'
 ```
 
 ```bash
@@ -553,13 +566,26 @@ curl -s localhost:8080/api/workflows/$ID -H "X-Api-Key: $PLATFORM_API_KEY" | jq
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/api/workflows` | create and start |
-| `GET` | `/api/workflows` | list, optional `?status=` |
+| `POST` | `/api/projects` | create a project |
+| `GET` | `/api/projects` | list, optional `?q=` and `?activeOnly=` |
+| `GET` | `/api/projects/{id}` | configuration as configured, and as resolved |
+| `PUT` | `/api/projects/{id}` | edit the configuration |
+| `DELETE` | `/api/projects/{id}` | archive, or delete with `?force=true` when it holds no workflow |
+| `POST` | `/api/projects/{id}/restore` | un-archive |
+| `POST` | `/api/projects/{id}/clone` | copy the configuration under a new name, without the workflows |
+| `GET` | `/api/projects/{id}/dashboard` | cost, tokens, durations, success rate, failures |
+| `POST` | `/api/projects/{id}/workflows` | create and start from a Jira ticket |
+| `POST` | `/api/projects/{id}/workflows/message` | create and start from a free-form request |
+| `GET` | `/api/projects/{id}/workflows` | list, filters `status`, `jiraTicket`, `from`, `to`, `includeArchived` |
+| `DELETE` | `/api/projects/{p}/workflows/{w}` | delete a terminated workflow (never touches the GitLab merge request) |
+| `POST` | `/api/projects/{p}/workflows/{w}/archive` | hide it from the listings, audit trail intact |
+| `GET` | `/api/workflows` | list, optional `?status=`, `?projectId=` |
 | `GET` | `/api/workflows/{id}` | full audit view |
 | `POST` | `/api/workflows/{id}/retry` | restart a stopped workflow with a fresh budget |
 | `POST` | `/api/workflows/{id}/cancel` | stop it |
 | `POST` | `/api/workflows/{id}/approve` | record the human decision (does **not** merge) |
-| `POST` | `/webhooks/jira` | Jira events |
+| `POST` | `/api/workflows` · `/api/workflows/message` | **deprecated**, resolves the project from `gitlabProjectId` and answers 409 when the answer is ambiguous |
+| `POST` | `/webhooks/jira` | Jira events; the project is resolved from the Jira key of the ticket |
 | `POST` | `/webhooks/gitlab` | pipeline and merge request events |
 
 ## 13. Observability
