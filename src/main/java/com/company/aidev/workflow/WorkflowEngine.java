@@ -245,7 +245,7 @@ public class WorkflowEngine {
         if (buildProfile == BuildProfile.UNSUPPORTED) {
             return StepOutcome.to(
                     WorkflowStatus.FAILED,
-                    "Unsupported repository type: expected angular.json or pom.xml/mvnw at the repository root");
+                    "Unsupported repository type: expected angular.json, pyproject.toml/requirements.txt, or pom.xml/mvnw at the repository root");
         }
 
         TicketAnalysis analysis;

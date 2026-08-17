@@ -18,6 +18,18 @@ class BuildProfileTest {
     }
 
     @Test
+    void detectsPythonFromPyproject() {
+        assertThat(BuildProfile.detect(context("pyproject.toml", "src/example/__init__.py")))
+                .isEqualTo(BuildProfile.PYTHON);
+    }
+
+    @Test
+    void detectsPythonFromRequirementsFile() {
+        assertThat(BuildProfile.detect(context("requirements.txt", "app.py", "test_app.py")))
+                .isEqualTo(BuildProfile.PYTHON);
+    }
+
+    @Test
     void rejectsUnknownRepositoryTypes() {
         assertThat(BuildProfile.detect(context("Gemfile", "app/main.rb"))).isEqualTo(BuildProfile.UNSUPPORTED);
     }

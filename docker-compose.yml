@@ -5,7 +5,8 @@
 # Before starting:
 #   docker build -t ai-dev-sandbox:21 docker/sandbox
 #   docker build -t ai-dev-sandbox-angular:22 docker/sandbox-angular
-#   cp .env.example .env   # then fill in the tokens
+#   docker build -t ai-dev-sandbox-python:3.11 docker/sandbox-python
+#   ./init.sh              # alternatively builds all sandbox images and creates .env
 #   docker compose up --build
 #
 # Always bring the stack up as a whole. Starting the platform alone (`up ai-dev-platform --no-deps`)
@@ -73,6 +74,7 @@ services:
 
       SANDBOX_IMAGE: ai-dev-sandbox:21
       SANDBOX_ANGULAR_IMAGE: ai-dev-sandbox-angular:22
+      SANDBOX_PYTHON_IMAGE: ai-dev-sandbox-python:3.11
       DOCKER_HOST: unix:///var/run/docker.sock
     ports:
       - "${SERVER_HOST_PORT:-8080}:8080"

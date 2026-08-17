@@ -17,6 +17,7 @@ public record SandboxProperties(
         String dockerHost,
         String image,
         String angularImage,
+        String pythonImage,
         String workspaceRoot,
         Long memoryLimitBytes,
         Long cpuQuota,
@@ -33,6 +34,7 @@ public record SandboxProperties(
         dockerHost = blankTo(dockerHost, "unix:///var/run/docker.sock");
         image = blankTo(image, "ai-dev-sandbox:21");
         angularImage = blankTo(angularImage, "ai-dev-sandbox-angular:22");
+        pythonImage = blankTo(pythonImage, "ai-dev-sandbox-python:3.11");
         workspaceRoot = blankTo(workspaceRoot, "/workspaces");
         memoryLimitBytes = memoryLimitBytes == null ? 4L * 1024 * 1024 * 1024 : memoryLimitBytes;
         cpuQuota = cpuQuota == null ? 200_000L : cpuQuota; // 2 CPUs with the default 100ms period
@@ -43,7 +45,7 @@ public record SandboxProperties(
         maxLifetime = maxLifetime == null ? Duration.ofHours(2) : maxLifetime;
         maxOutputChars = maxOutputChars == null ? 200_000 : maxOutputChars;
         allowedExecutables = allowedExecutables == null || allowedExecutables.isEmpty()
-                ? List.of("git", "mvn", "./mvnw", "mvnw", "java", "ls", "cat", "grep", "find", "test", "npm", "node")
+                ? List.of("git", "mvn", "./mvnw", "mvnw", "java", "ls", "cat", "grep", "find", "test", "npm", "node", "python")
                 : List.copyOf(allowedExecutables);
         environment = environment == null ? Map.of() : Map.copyOf(environment);
     }
@@ -53,6 +55,7 @@ public record SandboxProperties(
         return switch (profile) {
             case MAVEN -> image;
             case ANGULAR -> angularImage;
+            case PYTHON -> pythonImage;
             case UNSUPPORTED -> throw new IllegalArgumentException("Unsupported repository build profile");
         };
     }

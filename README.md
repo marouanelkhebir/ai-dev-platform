@@ -3,8 +3,8 @@
 An autonomous team of LLM agents that takes a Jira ticket and produces a tested, reviewed GitLab
 merge request. **The merge itself stays manual.**
 
-Java 21 · Spring Boot 3.3 · Maven · LangChain4j · PostgreSQL · Docker. No Python anywhere in the
-orchestration.
+Java 21 · Spring Boot 3.3 · Maven · LangChain4j · PostgreSQL · Docker. Python is available only
+inside dedicated development sandboxes, never in orchestration.
 
 ---
 
@@ -181,12 +181,10 @@ is the moment to introduce it.
 Prerequisites: JDK 21+, Maven 3.9+, Docker, and access to an OpenAI-compatible API.
 
 ```bash
-# 1. Build the sandbox images used according to the detected repository type
-docker build -t ai-dev-sandbox:21 docker/sandbox
-docker build -t ai-dev-sandbox-angular:22 docker/sandbox-angular
+# 1. Build all sandbox images and create .env if needed
+./init.sh
 
-# 2. Configure
-cp .env.example .env
+# 2. Configure .env
 # fill in PLATFORM_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY, JIRA_* and GITLAB_*
 
 # 3. Start PostgreSQL and the platform

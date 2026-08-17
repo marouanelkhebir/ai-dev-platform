@@ -15,6 +15,7 @@ import com.company.aidev.tool.FileTools;
 import com.company.aidev.tool.GitTools;
 import com.company.aidev.tool.MavenTools;
 import com.company.aidev.tool.NpmTools;
+import com.company.aidev.tool.PythonTools;
 import com.company.aidev.tool.ToolContext;
 import com.company.aidev.tool.ToolExecutionRecorder;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -113,6 +114,9 @@ public class TestAgent {
         if (profile == BuildProfile.ANGULAR) {
             return runAngularBuild(sandbox);
         }
+        if (profile == BuildProfile.PYTHON) {
+            return runPythonBuild(sandbox);
+        }
         if (profile == BuildProfile.UNSUPPORTED) {
             return TestReport.failed("", "Unsupported repository build profile");
         }
@@ -149,6 +153,31 @@ public class TestAgent {
         return new TestReport(true, 0, 0, 0, List.of(), List.of(), output.toString());
     }
 
+    private TestReport runPythonBuild(Sandbox sandbox) {
+        StringBuilder output = new StringBuilder();
+        List<List<String>> commands = new java.util.ArrayList<>();
+        if (sandboxManager.exists(sandbox, "requirements.txt")) {
+            commands.add(List.of("python", "-m", "pip", "install", "-r", "requirements.txt"));
+        }
+        if (sandboxManager.exists(sandbox, "pyproject.toml") || sandboxManager.exists(sandbox, "setup.py")) {
+            commands.add(List.of("python", "-m", "pip", "install", "-e", "."));
+        }
+        commands.add(List.of("python", "-m", "pytest"));
+
+        for (List<String> command : commands) {
+            CommandResult result = sandboxManager.execute(
+                    sandbox, command, sandbox.repositoryPath(), sandboxProperties.commandTimeout());
+            output.append(result.toToolOutput(20_000)).append('\n');
+            if (result.timedOut()) {
+                return TestReport.failed(output.toString(), "Python build timed out while running " + String.join(" ", command));
+            }
+            if (!result.successful()) {
+                return TestReport.failed(output.toString(), "Python build failed while running " + String.join(" ", command));
+            }
+        }
+        return new TestReport(true, 0, 0, 0, List.of(), List.of(), output.toString());
+    }
+
     private List<String> analyseCoverageGaps(
             UUID workflowId, Sandbox sandbox, int attempt, TicketAnalysis analysis, RepositoryRules rules, BuildProfile profile) {
 
@@ -157,9 +186,11 @@ public class TestAgent {
 
         List<Object> tools = new java.util.ArrayList<>();
         tools.add(new FileTools(sandboxManager, toolRecorder, toolContext));
-        tools.add(profile == BuildProfile.ANGULAR
-                ? new NpmTools(sandboxManager, toolRecorder, toolContext)
-                : new MavenTools(sandboxManager, toolRecorder, toolContext));
+        tools.add(switch (profile) {
+            case ANGULAR -> new NpmTools(sandboxManager, toolRecorder, toolContext);
+            case PYTHON -> new PythonTools(sandboxManager, toolRecorder, toolContext);
+            case MAVEN, UNSUPPORTED -> new MavenTools(sandboxManager, toolRecorder, toolContext);
+        });
         tools.add(new GitTools(gitOperations, toolRecorder, toolContext));
 
         String diff = gitOperations.diff(sandbox, MAX_DIFF_CHARS);

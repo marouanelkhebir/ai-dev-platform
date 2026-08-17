@@ -3,7 +3,7 @@ package com.company.aidev.domain;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.List;
 
-/** Outcome of the local Maven run plus the test agent's gap analysis. */
+/** Outcome of the local build run plus the test agent's gap analysis. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record TestReport(
         boolean successful,

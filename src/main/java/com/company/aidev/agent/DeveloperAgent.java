@@ -14,6 +14,7 @@ import com.company.aidev.tool.FileTools;
 import com.company.aidev.tool.GitTools;
 import com.company.aidev.tool.MavenTools;
 import com.company.aidev.tool.NpmTools;
+import com.company.aidev.tool.PythonTools;
 import com.company.aidev.tool.ToolContext;
 import com.company.aidev.tool.ToolExecutionRecorder;
 import java.util.List;
@@ -76,8 +77,11 @@ public class DeveloperAgent {
 
         List<Object> tools = new java.util.ArrayList<>();
         tools.add(new FileTools(sandboxManager, toolRecorder, toolContext));
-        if (BuildProfile.detect(sandboxManager, sandbox) == BuildProfile.ANGULAR) {
+        BuildProfile profile = BuildProfile.detect(sandboxManager, sandbox);
+        if (profile == BuildProfile.ANGULAR) {
             tools.add(new NpmTools(sandboxManager, toolRecorder, toolContext));
+        } else if (profile == BuildProfile.PYTHON) {
+            tools.add(new PythonTools(sandboxManager, toolRecorder, toolContext));
         } else {
             tools.add(new MavenTools(sandboxManager, toolRecorder, toolContext));
         }

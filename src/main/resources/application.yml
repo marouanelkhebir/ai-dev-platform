@@ -159,6 +159,7 @@ sandbox:
   docker-host: ${DOCKER_HOST:unix:///var/run/docker.sock}
   image: ${SANDBOX_IMAGE:ai-dev-sandbox:21}
   angular-image: ${SANDBOX_ANGULAR_IMAGE:ai-dev-sandbox-angular:22}
+  python-image: ${SANDBOX_PYTHON_IMAGE:ai-dev-sandbox-python:3.11}
   workspace-root: /workspaces
   memory-limit-bytes: 4294967296
   cpu-quota: 200000
@@ -182,6 +183,7 @@ sandbox:
     - test
     - npm
     - node
+    - python
   # Only these variables reach the container. No production credential is ever listed here.
   environment:
     MAVEN_OPTS: "-Xmx2g -Djava.awt.headless=true"

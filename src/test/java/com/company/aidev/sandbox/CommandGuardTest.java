@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 class CommandGuardTest {
 
     private final CommandGuard guard = new CommandGuard(new SandboxProperties(
-            null, null, null, null, null, null, null, null, null, null, null, null, List.of("git", "mvn", "grep"), null));
+            null, null, null, null, null, null, null, null, null, null, null, null, null, List.of("git", "mvn", "grep"), null));
 
     @Test
     @DisplayName("accepts an allowlisted executable")
