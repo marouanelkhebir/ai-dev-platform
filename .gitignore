@@ -25,12 +25,37 @@ Thumbs.db
 logs/
 workspaces/
 
-# Secrets - never commit any of these
+# Secrets and local configuration - never commit any of these
 .env
 .env.*
 !.env.example
+!.env.*.example
+.envrc
+*.local
+*.local.*
+config/local/
+config/secrets/
+secrets/
+
+# Private keys, certificates and keystores
 *.pem
 *.key
+*.p8
 *.p12
+*.pfx
 *.jks
-secrets/
+*.keystore
+id_rsa
+id_dsa
+
+# Local databases and dumps
+*.sqlite
+*.sqlite3
+*.db
+*.sql.gz
+
+# Docker Compose overrides often contain local credentials
+compose.override.yml
+compose.override.yaml
+docker-compose.override.yml
+docker-compose.override.yaml

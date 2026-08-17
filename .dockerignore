@@ -1,0 +1,20 @@
+# Keep credentials and local artifacts out of Docker build contexts.
+.git/
+.env
+.env.*
+!.env.example
+!.env.*.example
+target/
+*.log
+logs/
+workspaces/
+secrets/
+config/local/
+config/secrets/
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore

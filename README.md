@@ -1,751 +1,136 @@
-# ai-dev-platform
+# AI Dev Platform
 
-An autonomous team of LLM agents that takes a Jira ticket and produces a tested, reviewed GitLab
-merge request. **The merge itself stays manual.**
+AI Dev Platform is a Java service that orchestrates a team of LLM agents to turn a Jira ticket or a developer request into a tested GitLab merge request. A human always reviews and merges the resulting merge request.
 
-Java 21 · Spring Boot 3.3 · Maven · LangChain4j · PostgreSQL · Docker. Python is available only
-inside dedicated development sandboxes, never in orchestration.
+The platform provides a small web console, a REST API and an event stream to follow each workflow.
 
----
+## What it does
 
-## Table of contents
+For each workflow, the platform can:
 
-1. [What it does](#1-what-it-does)
-2. [Architecture](#2-architecture)
-3. [Why this design](#3-why-this-design)
-4. [Running it locally](#4-running-it-locally)
-5. [Configuring the OpenAI-compatible API](#5-configuring-the-openai-compatible-api)
-6. [Configuring Jira](#6-configuring-jira)
-7. [Configuring GitLab](#7-configuring-gitlab)
-8. [Creating the technical accounts and tokens](#8-creating-the-technical-accounts-and-tokens)
-9. [Security model](#9-security-model)
-10. [Repository rules: the `.ai/` directory](#10-repository-rules-the-ai-directory)
-11. [A complete run: BANK-1245](#11-a-complete-run-bank-1245)
-12. [REST API](#12-rest-api)
-13. [Observability](#13-observability)
-14. [Extending: a new agent](#14-extending-a-new-agent)
-15. [Extending: a new tool](#15-extending-a-new-tool)
-16. [Onboarding a new repository](#16-onboarding-a-new-repository)
-17. [Testing](#17-testing)
-18. [Known limits](#18-known-limits)
+1. analyse the Jira issue and ask for clarification when needed;
+2. create a technical plan;
+3. clone the target GitLab repository into an isolated Docker sandbox;
+4. implement the change, run tests and perform a security review;
+5. push an `ai/` branch and open a GitLab merge request after its gates pass.
 
----
+Workflow state, execution details and model costs are persisted in PostgreSQL. Jira, GitLab and the LLM provider are configured with environment variables or from the settings screen.
 
-## 1. What it does
+## Architecture
 
-```
-JIRA (label agent-ready)
-  │
-  ▼
-ANALYZE_JIRA ──ambiguity──► AI_NEEDS_CLARIFICATION (human)
-  │
-  ▼
-ARCHITECT  (read-only plan)
-  │
-  ▼
-DEVELOP  ◄──────────────────────────┐
-  │                                 │
-  ▼                                 │
-LOCAL_TESTS ──fail──────────────────┤
-  │                                 │
-  ▼                                 │
-SECURITY_REVIEW ──REQUEST_CHANGES───┘
-  │       (nothing is pushed until this gate approves)
-  ▼
-PUSH → CREATE_MR
-  │
-  ▼
-DONE   (a human reviews and merges, manually)
+```text
+Jira or developer request
+          |
+          v
+  analysis -> planning -> development -> tests -> security gate
+                                                       |
+                                                       v
+                                      GitLab branch + merge request
+                                                       |
+                                                       v
+                                            human review and merge
 ```
 
-Both loops are bounded (3 attempts by default). When a budget is exhausted the ticket moves to
-`AI_FAILED` with the work left in place and a report attached, so a human can finish it instead of
-starting over.
+The application is built with Java 21, Spring Boot 3.3, Maven, PostgreSQL, Docker and LangChain4j. Sandboxed project work runs in dedicated Java, Angular or Python containers.
 
-The `CODE_REVIEW`, `ACCEPTANCE` and `WAITING_HUMAN_APPROVAL` states exist in `WorkflowStatus` and
-their steps are implemented in the engine, but **the current version never transitions into them**:
-`CREATING_MERGE_REQUEST` goes straight to `DONE`. The reviewer and acceptance agents therefore do
-not run on a real ticket yet.
+## Prerequisites
 
-## 2. Architecture
+- JDK 21 and Maven 3.9+ (for running outside Docker)
+- Docker Desktop or Docker Engine with Docker Compose v2
+- Access to an OpenAI-compatible LLM API
+- Jira and GitLab service credentials if you want to use their integrations
 
-```
-ai-dev-platform/
-├── pom.xml
-├── docker-compose.yml
-├── Dockerfile                       production image of the platform
-├── .gitlab-ci.yml
-├── docker/sandbox/                  image the tickets are developed in
-├── docs/ai-template/                templates for the .ai/ directory of your repositories
-└── src/main/java/com/company/aidev/
-    ├── AiDevPlatformApplication.java
-    ├── agent/                       the 7 agents + AgentSupport + MavenOutputParser
-    ├── api/                         REST controllers, DTOs, error handling
-    ├── config/                      @ConfigurationProperties records, HTTP clients, executors
-    ├── domain/                      typed results: TicketAnalysis, TechnicalPlan, CodeReview, ...
-    ├── git/                         GitOperations — clone, commit, push (platform-only)
-    ├── gitlab/                      GitLabClient, webhook, models
-    ├── jira/                        JiraClient, webhook, ADF conversion, models
-    ├── llm/                         OpenAI-compatible API access, model roles, output parsing, prompts, audit
-    ├── observability/               Micrometer meters, MDC helper
-    ├── persistence/                 entities and repositories
-    ├── rules/                       loader of the .ai/ directory
-    ├── sandbox/                     SandboxManager, DockerSandboxManager, command and path guards
-    ├── security/                    branch policy, webhook auth, API key, secret redaction
-    ├── tool/                        the tools handed to the agents
-    └── workflow/                    the engine, the state machine, the scheduler
-```
-
-### Differences from the layout suggested in the brief, and why
-
-| Change | Reason |
-|---|---|
-| `git/GitOperations` split out of `tool/GitTools` | Cloning, committing and pushing are privileged. Keeping them out of the tool set means the developer agent is *structurally* unable to push, rather than merely instructed not to. |
-| `llm/` package added | Model selection, prompt loading, structured-output parsing and LLM audit are one concern and are used by every agent. |
-| `rules/` package added | Loading `.ai/*` is a repository concern, not an agent concern; agents receive `RepositoryRules`, already loaded. |
-| `agent/MavenOutputParser` | Test counts are parsed from the build log deterministically. See below. |
-| `workflow/WorkflowStateStore` | Isolates the short transactions around a long-running step. |
-| `security/` holds real enforcement | `BranchPolicy`, `WebhookAuthenticator`, `SecretRedactor`, `ApiKeyFilter` — each backed by tests. |
-
-## 3. Why this design
-
-### LangChain4j Agentic, LangGraph4j, or neither?
-
-**Decision: LangChain4j `AiServices` for the agents, a hand-written persisted state machine for the
-orchestration. No LangGraph4j.**
-
-The reasoning:
-
-- **What LangChain4j gives us and we use**: declarative AI services, tool calling with typed Java
-  methods, an OpenAI-compatible client, and chat model listeners for token
-  accounting. That is exactly the agent-level plumbing we want, and `AgentSupport` is the only class
-  that touches it.
-- **What the workflow orchestration libraries give us and we do not need**: in-memory composition of
-  agents (sequential, loop, parallel). Our workflow is not in-memory. It spans **hours or days**: it
-  stops at `WAITING_PIPELINE` until a GitLab webhook arrives, and at `WAITING_HUMAN_APPROVAL` until a
-  human acts. A graph held in a JVM object dies with the pod. Everything that matters — the state,
-  the artefacts, the attempt counters — has to be in PostgreSQL anyway.
-- Once the state lives in the database, the "graph" is a `switch` over an enum plus a row update. It
-  is 300 lines, it is fully covered by `WorkflowEngineTest`, and a new state is one enum constant and
-  one case. Adding LangGraph4j on top would mean persisting *its* state as well, so the same problem
-  plus a dependency.
-
-**When to revisit**: if you later want several agents debating in parallel *inside* a single step
-(for example three reviewers voting), that is exactly what the agentic composition APIs are for, and
-it plugs in at the agent level without touching the engine.
-
-### Test results are not produced by a model
-
-`MavenOutputParser` reads the totals and the failing tests from the real build log. Asking an LLM
-"how many tests failed" is how a workflow ends up opening a merge request on a red build. The model
-is only asked the question it is good at: *which acceptance criteria have no test*.
-
-### Structured outputs are parsed defensively
-
-`StructuredOutputParser` extracts the first balanced JSON value from the answer, ignoring markdown
-fences and surrounding prose, and `AgentSupport` retries once with a repair instruction. Self-hosted
-models behind vLLM do not reliably honour `response_format`, and this keeps the platform working
-across model swaps.
-
-### The domain enforces what the prompt only asks for
-
-A reviewer that approves while reporting a `BLOCKER` is corrected by `CodeReview.normalized()`. A
-criterion marked `PASS` with no evidence becomes `NOT_VERIFIABLE` in the record constructor. The
-acceptance report is realigned on the ticket's own criteria list, so a model that silently drops one
-cannot produce "4/4 covered". Prompts are guidance; invariants are code.
-
-### Maven dependencies retained
-
-| Dependency | Why |
-|---|---|
-| `spring-boot-starter-web`, `-data-jpa`, `-validation`, `-actuator`, `-aop` | API, persistence, config validation, health and metrics, Resilience4j aspects |
-| `dev.langchain4j:langchain4j` + `langchain4j-open-ai` (1.0.1) | `AiServices`, tool calling, OpenAI-compatible client |
-| `docker-java-core` + `docker-java-transport-httpclient5` (3.4.0) | Sandbox containers over the Docker API — no shell out to the `docker` CLI |
-| `commons-compress` | Streams files in and out of a container as tar, avoiding shell quoting entirely |
-| `flyway-core` + `flyway-database-postgresql` | Versioned schema |
-| `postgresql` | Workflow state and the full audit trail |
-| `resilience4j-spring-boot3` | Retry and circuit breaker on Jira and GitLab |
-| `micrometer-registry-prometheus` | The `ai_*` metrics |
-| `logstash-logback-encoder` | JSON logs with the workflow MDC |
-| `springdoc-openapi` | API documentation |
-| `wiremock-standalone`, `testcontainers`, `h2` (test) | Client contract tests, real PostgreSQL for the migration, fast context tests |
-
-**Redis is not used.** It was on the shortlist for locking and idempotency, and neither needs it:
-concurrency is handled by a `claimed_at` column plus JPA optimistic locking, and webhook idempotency
-by a unique constraint. Adding Redis would add an operational dependency and a second source of
-truth for no gain. If you later run many instances and want a shared rate limiter across pods, that
-is the moment to introduce it.
-
-## 4. Running it locally
-
-Prerequisites: JDK 21+, Maven 3.9+, Docker, and access to an OpenAI-compatible API.
+## Quick start with Docker Compose
 
 ```bash
-# 1. Build all sandbox images and create .env if needed
+# Clone the project, then enter it
+git clone https://github.com/<your-account>/ai-dev-platform.git
+cd ai-dev-platform
+
+# Build the sandbox images and create the local .env file
 ./init.sh
 
-# 2. Configure .env
-# fill in PLATFORM_API_KEY, OPENAI_BASE_URL, OPENAI_API_KEY, JIRA_* and GITLAB_*
-
-# 3. Start PostgreSQL and the platform
+# Edit .env and provide at least PLATFORM_API_KEY and the OpenAI settings
+# Then start PostgreSQL and the application
 docker compose up --build
 ```
 
-Bring the stack up **as a whole**. Starting the platform alone leaves it with no database to resolve.
+Open the console at [http://localhost:8080](http://localhost:8080). The API documentation is available at [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html), and the health endpoint at [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health).
 
-Without Docker Compose, for development against a locally run application:
+Stop the stack with `docker compose down`. Add `-v` only if you deliberately want to delete the local PostgreSQL data volume.
+
+## Configuration
+
+Copy the template before running the application:
 
 ```bash
-docker run -d --name aidev-pg -e POSTGRES_DB=aidev -e POSTGRES_USER=aidev \
-  -e POSTGRES_PASSWORD=aidev -p 5432:5432 postgres:16-alpine
+cp .env.example .env
 ```
 
+`.env` is intentionally ignored by Git. Never put real credentials in `.env.example`, `application.yml`, documentation or source code.
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `PLATFORM_API_KEY` | Yes | Key required in the `X-Api-Key` header for `/api/**`. |
+| `OPENAI_BASE_URL` | Yes | Base URL of the OpenAI-compatible API. |
+| `OPENAI_API_KEY` | Yes | API key for the LLM provider. |
+| `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | For Jira | Jira connection settings. |
+| `JIRA_WEBHOOK_SECRET` | For Jira webhooks | Shared secret used to authenticate Jira webhooks. |
+| `GITLAB_BASE_URL`, `GITLAB_API_TOKEN` | For GitLab | GitLab connection settings. Use a minimally scoped bot token. |
+| `GITLAB_WEBHOOK_SECRET` | For GitLab webhooks | Shared secret used to authenticate GitLab webhooks. |
+| `DB_PASSWORD` | Optional locally | PostgreSQL password; Compose defaults to `aidev` for local development only. |
+| `MODEL_ANALYSIS`, `MODEL_CODING`, `MODEL_REVIEW`, `MODEL_FAST` | Optional | Model names used for the platform's logical roles. |
+
+For a public deployment, use a secrets manager or your deployment platform's protected secret store rather than committing a configuration file.
+
+## Run without Docker Compose
+
+Start a PostgreSQL 16 database, then export the connection settings and run Spring Boot:
+
 ```bash
+export DB_URL=jdbc:postgresql://localhost:5432/aidev
+export DB_USERNAME=aidev
+export DB_PASSWORD=aidev
+export PLATFORM_API_KEY=change-me
+export OPENAI_BASE_URL=https://your-llm-provider.example/v1
+export OPENAI_API_KEY=your-key
+
 mvn spring-boot:run
 ```
 
-Do not leave that standalone container running while also using Docker Compose: it holds host port
-5432 and the Compose `postgres` service will fail to start. Either stop it (`docker rm -f aidev-pg`)
-or set `DB_HOST_PORT=5433` in `.env`.
+The workflow still requires the sandbox images. Build them first with `./init.sh`.
 
-Check it is alive:
+## Useful commands
 
 ```bash
-curl -s localhost:8080/actuator/health | jq
+mvn clean compile      # Compile
+mvn test               # Run unit tests
+mvn verify             # Run unit and integration tests, with JaCoCo output
+docker compose up --build
 ```
 
-API documentation: `http://localhost:8080/swagger-ui.html`.
+## API authentication
 
-### Troubleshooting
-
-**`UnknownHostException: postgres` at startup, container exits with code 1**
-
-The platform container cannot resolve the database service, which means it is not on the same
-network as a running `postgres`. Identify which case you are in:
+All `/api/**` endpoints require the platform API key:
 
 ```bash
-docker compose ps -a
+curl -H "X-Api-Key: $PLATFORM_API_KEY" \
+  http://localhost:8080/api/projects
 ```
 
-```bash
-docker network inspect ai-dev-platform_aidev --format '{{range .Containers}}{{.Name}} {{end}}'
-```
+See the Swagger UI for request examples and the full endpoint reference.
 
-| Cause | Fix |
-|---|---|
-| The platform was started alone (`up ai-dev-platform`, `--no-deps`) | `docker compose up` — the whole stack |
-| Another `postgres` holds host port 5432, so this project's never started | `docker rm -f aidev-pg`, or set `DB_HOST_PORT=5433` in `.env` |
-| Containers left over from an earlier project name, on another network | `docker compose down --remove-orphans` then `docker compose up --build` |
-| Legacy `docker-compose` v1 was used | Use `docker compose` (v2): v1 ignores `name:` and the `depends_on` conditions |
+## Security notes
 
-The application deliberately fails fast rather than starting without a database — an orchestrator
-with no state store would silently lose workflows. The Compose services carry
-`restart: unless-stopped` so a transient startup race resolves itself.
+- Local credentials belong only in `.env`, which is excluded from Git and the Docker build context.
+- Private keys, keystores, certificates with private material, local secret directories and common local configuration files are ignored.
+- The application does not automatically merge code; a human merge remains required.
+- The Docker socket is mounted for the trusted orchestrator so it can create sandboxes. Treat access to the deployed platform as privileged and use a restricted socket proxy in production.
 
-**`No qualifying bean` or a validation error on a `@ConfigurationProperties` record**
+## Repository onboarding
 
-A required credential is missing. `OPENAI_API_KEY`, `JIRA_API_TOKEN` and `GITLAB_API_TOKEN` have no
-default on purpose: a blank token must fail at startup, not at the first push to GitLab.
+Each repository managed by the platform may contain an `.ai/` directory. The templates under [`docs/ai-template/`](docs/ai-template/) describe project architecture, commands, testing and security constraints for agents.
 
-## 5. Configuring the OpenAI-compatible API
+## License
 
-At first start, open the platform settings and enter the API base URL and API token supplied by your
-provider. They are stored as platform settings; the token is encrypted and never returned by the API.
-
-Four **logical roles** are mapped to model names:
-
-```yaml
-ai:
-  openai:
-    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
-    api-key: ${OPENAI_API_KEY}
-    timeout: PT5M
-  models:
-    analysis: reasoning-model   # ticket analysis, planning, acceptance
-    coding:   coder-model       # implementation and tests
-    review:   reasoning-model   # code review, security review
-    fast:     fast-model        # short utility calls
-```
-
-Each agent picks a role, and can override the sampling settings:
-
-```yaml
-ai:
-  agents:
-    developer:
-      model-role: CODING
-      temperature: 0.1
-      max-tokens: 16384
-      max-tool-calls: 120
-    reviewer:
-      model-role: REVIEW
-      temperature: 0.0
-```
-
-For container deployments, provide `OPENAI_BASE_URL` and `OPENAI_API_KEY`. The API URL must include
-the provider's version path when required (for example `/v1`).
-
-**Sizing note.** The coding model needs a large context: the developer agent sends the plan, the
-repository rules and the files it reads. 32k is a practical minimum, 128k is comfortable.
-
-## 6. Configuring Jira
-
-### Trigger
-
-A workflow starts only when a ticket **opts in**, via a label or a status:
-
-```yaml
-jira:
-  trigger:
-    label: agent-ready
-    status: READY_FOR_AI
-```
-
-The ticket must also carry a label naming the target repository:
-
-```
-gitlab-project:bank/customer-management
-```
-
-Keeping the mapping on the ticket means a human can always see why the platform pushed where it did.
-
-### Statuses the platform writes back
-
-| Status | When |
-|---|---|
-| `AI_IN_PROGRESS` | analysis succeeded, work started |
-| `AI_NEEDS_CLARIFICATION` | the ticket contains a genuine unresolved ambiguity |
-| `AI_READY_FOR_REVIEW` | all gates passed, a human is expected |
-| `AI_FAILED` | a retry budget was exhausted |
-
-Create these statuses and the transitions into them in your Jira workflow. If a transition is
-missing the platform logs a warning and carries on — a Jira misconfiguration must not lose a merge
-request.
-
-### Acceptance criteria
-
-Read from the custom fields listed in `jira.acceptance-criteria-fields`, and, when those are empty,
-parsed from an "Acceptance criteria" section of the description. When neither is present, the Jira
-analyst derives narrow, observable criteria from the explicit request and repository evidence; it
-asks for clarification only when a business rule or expected behaviour is genuinely unclear. Both
-ticket extraction paths are covered by `RestJiraClientIT`.
-
-### Webhook
-
-Create a Jira webhook pointing at:
-
-```
-POST https://ai-dev-platform.company.com/webhooks/jira
-```
-
-Events: *issue updated*. Add a header `X-Webhook-Token` with the value of `JIRA_WEBHOOK_SECRET`.
-A request without a valid token is rejected with 401.
-
-## 7. Configuring GitLab
-
-```yaml
-gitlab:
-  base-url: https://gitlab.company.com
-  api-token: ${GITLAB_API_TOKEN}
-  branch-prefix: "ai/"
-  default-target-branch: main
-  protected-branches: [main, master, develop, release, production]
-  merge-request-label: AI-GENERATED
-```
-
-### Webhook
-
-Per project, or at group level:
-
-```
-POST https://ai-dev-platform.company.com/webhooks/gitlab
-```
-
-Triggers: **Pipeline events** and **Merge request events**. Secret token: `GITLAB_WEBHOOK_SECRET`
-(sent by GitLab as `X-Gitlab-Token`).
-
-Pipeline events on branches outside `ai/` are ignored. Merge request events are acted on only for
-`approved` and `merge`.
-
-A lost webhook is not fatal: `WorkflowScheduler` polls pipelines that have been waiting longer than
-`gitlab.pipeline.poll-interval`, and fails the workflow past `gitlab.pipeline.timeout`.
-
-### Security reports
-
-If your projects include the GitLab security templates, the platform reads
-`gl-sast-report.json`, `gl-dependency-scanning-report.json` and `gl-secret-detection-report.json`
-from the job artifacts and hands them to the security agent. The agent interprets them; it does not
-replace them.
-
-## 8. Creating the technical accounts and tokens
-
-Two dedicated accounts. Never a personal account: the audit trail must say "the platform did this".
-
-### `jira-ai-bot`
-
-1. Create the Atlassian account, give it Browse/Comment/Transition on the relevant projects only.
-2. https://id.atlassian.com/manage-profile/security/api-tokens → **Create API token**.
-3. Set `JIRA_EMAIL` and `JIRA_API_TOKEN`.
-
-Permissions to grant: browse projects, add comments, transition issues. **Not**: delete issues,
-administer projects, manage webhooks.
-
-### `gitlab-ai-bot`
-
-1. Create the user, add it as **Developer** on the repositories in scope (not Maintainer).
-2. Create a Personal Access Token with scopes `api`, `read_repository`, `write_repository`.
-3. Set `GITLAB_API_TOKEN`.
-
-Then, per project, **Settings → Repository → Protected branches**:
-
-- `main`, `master`, `develop`, `release/*`: *Allowed to push* = **No one**, *Allowed to merge* =
-  Maintainers. The bot is a Developer, so it cannot touch them.
-- Add a protected branch pattern `ai/*` with *Allowed to push* = Developers, so the bot can push its
-  own branches.
-
-The bot must **not** have: Maintainer or Owner, permission to merge protected branches, permission
-to delete repositories, access to production CI/CD variables, or membership in any group that grants
-production deployment.
-
-### Storing the secrets
-
-Environment variables from your secret manager (Vault, GitLab CI/CD variables marked *masked* and
-*protected*, or Kubernetes secrets). Nothing in this repository reads a token from a file, and
-`.env` is gitignored.
-
-### Docker socket permissions
-
-The Compose service runs as root because Docker Desktop for macOS exposes
-`/var/run/docker.sock` as writable only by its owner. A supplementary group therefore cannot
-reliably grant the unprivileged application user access, and workflows would fail later with
-`Permission denied` while creating their sandbox.
-
-A raw Docker socket already grants host-equivalent container control. In production, use a
-restricted Docker socket proxy and run the platform with only the permissions it needs.
-
-## 9. Security model
-
-The controls that actually stop something, and where they are enforced:
-
-| Threat | Control | Enforced in |
-|---|---|---|
-| Command injection from model output | Commands are `List<String>` passed to `execCreate`; **no shell is ever spawned** | `DockerSandboxManager`, `CommandGuard` |
-| Arbitrary binaries | Executable allowlist; `sh`, `bash`, `env` explicitly rejected | `CommandGuard` |
-| Path traversal | Every model-provided path is normalised and must stay inside the repository | `WorkspacePaths` |
-| Agent editing its own rules | `.ai/`, `.git/` and `.gitlab-ci.yml` are unwritable | `WorkspacePaths.assertWritable` |
-| Push to a protected branch | Branch must match `ai/*` and must not be protected, checked before push **and** before merge request creation | `BranchPolicy` |
-| Agent merging its own work | No merge method exists in `GitLabClient` | absence by design |
-| Token leaking into the workspace | GitLab credentials are passed as `GIT_CONFIG_*` env vars, never in the remote URL | `GitOperations` |
-| Token leaking into logs or audit rows | Every stored prompt, output, tool argument and error is redacted | `SecretRedactor` |
-| Unauthenticated workflow creation | Static API key on `/api/**`, constant-time comparison | `ApiKeyFilter` |
-| Forged webhooks | Shared secret, constant-time comparison, refuses to run when unconfigured | `WebhookAuthenticator` |
-| Duplicate webhook delivery | Unique constraint on `(source, external_id)` | `WebhookIdempotencyService` |
-| Two workflows on one ticket | Partial unique index on non-terminal workflows | `V1__initial_schema.sql` |
-| Runaway agent loops | Bounded development, pipeline and review attempts | `WorkflowEngine` |
-| Container escape / resource exhaustion | All capabilities dropped, `no-new-privileges`, memory, CPU and PID limits | `DockerSandboxManager` |
-| Stale containers after a crash | Janitor removes containers past `sandbox.max-lifetime` | `WorkflowScheduler` |
-
-The sandbox has **no production credentials**: only the variables listed under `sandbox.environment`
-reach the container, and that list contains `MAVEN_OPTS` and `JAVA_TOOL_OPTIONS`.
-
-In production, prefer a Docker socket proxy restricted to container operations over mounting
-`/var/run/docker.sock` directly.
-
-## 10. Repository rules: the `.ai/` directory
-
-Any repository the platform may modify can carry an `.ai/` directory:
-
-```
-.ai/
-├── agent-instructions.md   standing orders, read first
-├── architecture.md         layers, dependencies, rules that must not be broken
-├── domain.md               ubiquitous language and business invariants
-├── coding-guidelines.md    style, patterns, what this team rejects in review
-├── testing-guidelines.md   test layers, tooling, naming
-├── security.md             data classification, authorisation rules, sensitive areas
-└── commands.md             how to build and test here
-```
-
-Templates to copy are in [`docs/ai-template/`](docs/ai-template/).
-
-Source priority when they disagree:
-
-1. Jira acceptance criteria
-2. the current code
-3. `.ai/*`
-4. OpenAPI specifications and ADRs
-5. general documentation
-
-The agents **never** modify these files — `WorkspacePaths.assertWritable` refuses writes under
-`.ai/`. An agent able to edit its own constraints is an agent without constraints.
-
-## 11. A complete run: BANK-1245
-
-> *"When a customer becomes fragile, the active fee must be suspended."*
-
-1. A developer adds the labels `agent-ready` and `gitlab-project:bank/customer-management` to
-   **BANK-1245**.
-2. Jira posts to `/webhooks/jira`. The token is verified, the delivery is recorded for idempotency,
-   the ticket is found eligible, and a workflow is created.
-3. **JiraAnalystAgent** reads the ticket, its comments and its linked issues, and produces a
-   `TicketAnalysis`: objective, 4 acceptance criteria, impacted services, no ambiguity, risk `HIGH`.
-   Jira moves to `AI_IN_PROGRESS`.
-   *(Had it found an ambiguity, the run would stop here with `AI_NEEDS_CLARIFICATION` and a comment
-   listing what needs clarifying.)*
-4. **ArchitectAgent** explores the repository through read-only GitLab tools and produces a
-   `TechnicalPlan`: files to change, ordered steps, tests to add, risks. It writes nothing.
-5. A Docker sandbox is created for the ticket, the repository is cloned at `main`, and the branch
-   `ai/BANK-1245` is created.
-6. **DeveloperAgent** works in the sandbox with `readFile`, `writeFile`, `searchCode`, `listFiles`,
-   `compile`, `runTests`, `runSingleTest`, `gitStatus`, `gitDiff`. It has no commit and no push tool.
-7. **TestAgent** runs `./mvnw verify`. `MavenOutputParser` reads the real counts from the log. If the
-   build is red, the failures go back to the developer agent as feedback — up to 3 attempts. Once
-   green, the agent looks for uncovered acceptance criteria, adds the missing tests, and the build is
-   re-run so the reported result describes what will actually be committed.
-8. The platform commits `BANK-1245 Suspend the active fee when the customer becomes fragile` and
-   pushes `ai/BANK-1245` (`--force-with-lease`, explicit refspec).
-9. A merge request is opened against `main`, labelled `AI-GENERATED`, with Jira link, objective,
-   changes, tests, and the review gates marked `PENDING`. The sandbox is destroyed. Jira gets a
-   comment with the merge request URL.
-10. GitLab CI runs. The pipeline webhook resumes the workflow. On failure, the logs of the failing
-    jobs are sent back to the developer agent — up to 3 attempts.
-11. **ReviewerAgent** receives only the ticket, the acceptance criteria, the diff and the `.ai/`
-    rules. It reports findings with severities and decides `APPROVE` or `REQUEST_CHANGES`. A blocking
-    finding sends the work back to development.
-12. **SecurityAgent** reviews the diff and interprets the SAST, dependency scanning and secret
-    detection reports from the pipeline, marking false positives with a justification.
-13. **AcceptanceAgent** goes through the 4 criteria one by one and demands concrete evidence — a
-    test name, a Cucumber scenario. A criterion with no evidence can never be `PASS`.
-14. The full report is posted on the merge request:
-
-    ```
-    | Gate            | Result        |
-    |-----------------|---------------|
-    | Local tests     | PASS (47/47)  |
-    | Code review     | APPROVE       |
-    | Security review | APPROVE       |
-    | Acceptance      | 4/4           |
-
-    AC1 — When a customer becomes fragile, the active fee must be suspended
-    Status: PASS
-    Evidence:
-    - FeeSuspensionServiceTest#shouldSuspendActiveFeeWhenCustomerBecomesFragile
-    - Cucumber scenario: "Joint account - second holder becomes fragile"
-    ```
-
-15. Jira moves to `AI_READY_FOR_REVIEW`, the workflow waits in `WAITING_HUMAN_APPROVAL`.
-16. A human reviews and merges. **The platform never merges.**
-
-## 12. REST API
-
-All `/api/**` calls require `X-Api-Key`.
-
-A workflow always belongs to a project, which owns the GitLab repository, the Jira key, the sandbox
-image and the execution configuration the workflow inherits.
-
-```bash
-# Create a project
-curl -X POST localhost:8080/api/projects \
-  -H "X-Api-Key: $PLATFORM_API_KEY" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Bank — customers","gitlabProject":"bank/customer-management","jiraProjectKey":"BANK"}'
-```
-
-```bash
-# Start a workflow on that project
-curl -X POST localhost:8080/api/projects/$PROJECT_ID/workflows \
-  -H "X-Api-Key: $PLATFORM_API_KEY" \
-  -H 'Content-Type: application/json' \
-  -d '{"jiraTicket":"BANK-1245"}'
-```
-
-```bash
-# Full audit view: analysis, plan, reports, steps, agent executions
-curl -s localhost:8080/api/workflows/$ID -H "X-Api-Key: $PLATFORM_API_KEY" | jq
-```
-
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/projects` | create a project |
-| `GET` | `/api/projects` | list, optional `?q=` and `?activeOnly=` |
-| `GET` | `/api/projects/{id}` | configuration as configured, and as resolved |
-| `PUT` | `/api/projects/{id}` | edit the configuration |
-| `DELETE` | `/api/projects/{id}` | archive, or delete with `?force=true` when it holds no workflow |
-| `POST` | `/api/projects/{id}/restore` | un-archive |
-| `POST` | `/api/projects/{id}/clone` | copy the configuration under a new name, without the workflows |
-| `GET` | `/api/projects/{id}/dashboard` | cost, tokens, durations, success rate, failures |
-| `POST` | `/api/projects/{id}/workflows` | create and start from a Jira ticket |
-| `POST` | `/api/projects/{id}/workflows/message` | create and start from a free-form request |
-| `GET` | `/api/projects/{id}/workflows` | list, filters `status`, `jiraTicket`, `from`, `to`, `includeArchived` |
-| `DELETE` | `/api/projects/{p}/workflows/{w}` | delete a terminated workflow (never touches the GitLab merge request) |
-| `POST` | `/api/projects/{p}/workflows/{w}/archive` | hide it from the listings, audit trail intact |
-| `GET` | `/api/workflows` | list, optional `?status=`, `?projectId=` |
-| `GET` | `/api/workflows/{id}` | full audit view |
-| `POST` | `/api/workflows/{id}/retry` | restart a stopped workflow with a fresh budget |
-| `POST` | `/api/workflows/{id}/cancel` | stop it |
-| `POST` | `/api/workflows/{id}/approve` | record the human decision (does **not** merge) |
-| `POST` | `/api/workflows` · `/api/workflows/message` | **deprecated**, resolves the project from `gitlabProjectId` and answers 409 when the answer is ambiguous |
-| `POST` | `/webhooks/jira` | Jira events; the project is resolved from the Jira key of the ticket |
-| `POST` | `/webhooks/gitlab` | pipeline and merge request events |
-
-## 13. Observability
-
-Prometheus at `/actuator/prometheus`:
-
-```
-ai_workflow_total{project}
-ai_workflow_success_total{project}
-ai_workflow_failed_total{project,reason}
-ai_agent_execution_seconds{agent,model,success}
-ai_agent_calls_total{agent,model,success}
-ai_development_attempts{project}
-ai_merge_request_created_total{project}
-ai_pipeline_failed_total{project}
-ai_review_rejected_total{project,type}
-ai_llm_tokens{agent,model,direction}
-ai_tool_calls_total{tool,success}
-ai_sandbox_command_seconds{executable,success}
-```
-
-Logs carry `workflowId`, `jiraTicket`, `agent`, `model`, `gitlabProject`, `branch`, `mergeRequest`,
-`attempt`, `durationMs`, `result` in the MDC. Activate the `json` profile for one JSON object per
-line. API keys, tokens, secrets and customer data are redacted before anything is written.
-
-Full audit in PostgreSQL: `workflow`, `workflow_step`, `agent_execution` (with the redacted prompts
-and outputs), `tool_execution`, `llm_execution`, `merge_request`, `test_result`, `review_result`.
-
-## 14. Extending: a new agent
-
-Say you want a `PerformanceAgent` that reviews the diff for performance regressions.
-
-**1. Add the enum constant** in `agent/AgentType.java`:
-
-```java
-PERFORMANCE(ModelRole.REVIEW),
-```
-
-**2. Write the prompt** in `src/main/resources/prompts/performance.md`. Describe the role, the rules
-and — importantly — the exact JSON shape of the answer.
-
-**3. Add the result record** in `domain/`, with `@JsonIgnoreProperties(ignoreUnknown = true)` and
-invariants in the compact constructor.
-
-**4. Write the agent**, following the shape of `ReviewerAgent`:
-
-```java
-@Component
-public class PerformanceAgent {
-
-    private final AgentSupport agentSupport;
-    private final PromptLoader promptLoader;
-
-    public PerformanceReport review(UUID workflowId, int attempt, TicketAnalysis analysis, String diff) {
-        var execution = agentSupport.beginExecution(AgentType.PERFORMANCE, workflowId, attempt);
-        var request = AgentRequest.withoutTools(
-                AgentType.PERFORMANCE, workflowId, attempt,
-                promptLoader.load("performance"), buildUserPrompt(analysis, diff));
-        return agentSupport.execute(request, execution, PerformanceReport.class);
-    }
-}
-```
-
-`AgentSupport` handles model selection, tool binding, prompt persistence, JSON parsing with one
-repair retry, metrics and MDC.
-
-**5. Add the state** in `WorkflowStatus`, a case in `WorkflowEngine.executeStep`, and a step method.
-The compiler will point at the `switch` — it is exhaustive on purpose.
-
-**6. Configure the model** in `application.yml` under `ai.agents.performance`.
-
-**7. Test it** in `WorkflowEngineTest`: a mock returning a rejection must send the work back to
-development, and one returning an approval must let the workflow continue.
-
-## 15. Extending: a new tool
-
-Tools are plain Java objects with `@Tool` methods, created per agent execution and bound to one
-sandbox.
-
-```java
-public class DependencyTools {
-
-    private final SandboxManager sandboxManager;
-    private final ToolExecutionRecorder recorder;
-    private final ToolContext context;
-
-    @Tool("Show the dependency tree of the project.")
-    public String dependencyTree(@P("Group id to filter on, or empty for all") String groupId) {
-        return recorder.record(context.workflowId(), context.agentExecutionId(),
-                "dependencyTree", groupId, () -> {
-            List<String> command = List.of("mvn", "-B", "-ntp", "dependency:tree");
-            return sandboxManager.execute(context.sandbox(), command,
-                    context.sandbox().repositoryPath(), Duration.ofMinutes(5)).toToolOutput(20_000);
-        });
-    }
-}
-```
-
-Then hand it to the agents that need it — and only those — in their `List.of(...)` of tools.
-
-Rules to respect:
-
-- **Always wrap in `recorder.record(...)`.** It provides the audit row, the metric and the conversion
-  of a failure into a message the model can act on instead of an exception that aborts the attempt.
-- **Never build a shell string.** Commands are `List<String>`; the executable must be in
-  `sandbox.allowed-executables`, and `CommandGuard` will reject anything else.
-- **Never accept a raw path.** Use the sandbox methods, which route through `WorkspacePaths`.
-- **Bound the output.** A 40 MB Maven log will blow the context window and the bill.
-- **Give the smallest tool set that does the job.** The reviewer, security and acceptance agents have
-  no tools at all, and that is a feature.
-
-## 16. Onboarding a new repository
-
-1. Add `gitlab-ai-bot` as **Developer** on the project.
-2. Protect `main`/`master` (push: no one) and add the `ai/*` pattern (push: developers).
-3. Add the GitLab webhook (pipeline + merge request events) with the shared secret.
-4. Create the `.ai/` directory from [`docs/ai-template/`](docs/ai-template/) and fill it in. This is
-   the single highest-leverage step: the quality of the output tracks the quality of `.ai/domain.md`
-   and `.ai/architecture.md` closely.
-5. Make sure the project builds with `./mvnw verify` inside the sandbox image. If it needs an
-   internal Nexus, point `docker/sandbox/settings.xml` at it.
-6. Try it on a small, well-specified ticket first, with clear acceptance criteria.
-7. Read the merge request. The first few will tell you what is missing from `.ai/`.
-
-## 17. Testing
-
-```bash
-mvn test      # unit tests
-mvn verify    # + integration tests
-```
-
-- **Unit** — `StructuredOutputParserTest` (the shapes models actually produce), `CommandGuardTest`
-  and `WorkspacePathsTest` (the injection and traversal surfaces), `MavenOutputParserTest` (real
-  Surefire output), `BranchPolicyTest`, `SecretRedactorTest`, `DomainInvariantsTest`,
-  `AcceptanceAgentAlignmentTest`, `MavenToolsTest`.
-- **Workflow** — `WorkflowEngineTest` drives the whole state machine with every external system
-  mocked: happy path, ambiguous ticket, bounded retry loops, pipeline failure feedback, rejected
-  review, uncovered acceptance criteria, and the guarantee that nothing reaches a human until every
-  gate agrees.
-- **Simulated GitLab pipeline** — `WebhookIT` posts real pipeline and merge request payloads and
-  asserts the workflow resumes, ignores foreign branches, and deduplicates redeliveries.
-- **Client contracts** — `RestJiraClientIT` and `RestGitLabClientIT` run against WireMock, covering
-  ADF conversion, acceptance criteria fallback, URL encoding of project paths, and 404 handling.
-- **Schema** — `FlywayMigrationIT` runs the migration against a real PostgreSQL via Testcontainers
-  and verifies the partial unique index. It is skipped when no Docker daemon is available.
-
-## 18. Known limits
-
-Stated plainly, because a platform that writes code should be honest about what it does not do.
-
-- **A sandbox does not survive a restart.** If the pod dies mid-development, the workflow re-enters
-  `DEVELOPING` with a fresh container and re-clones. Work already pushed is kept; work in progress in
-  the container is lost. Bounded by the attempt counters.
-- **The diff sent to the reviewers is truncated** at 120k characters. Very large changes are reviewed
-  partially — and a change that large should be split anyway.
-- **Merge conflicts are not resolved.** If `main` moves under an open merge request, a human rebases.
-- **Multi-module builds** report the totals of the last Surefire summary. This is correct for
-  single-module repositories and for the aggregate line; per-module attribution is not implemented.
-- **Only Maven is supported.** Gradle would need a new `GradleTools` plus a new output parser.
-- **The acceptance agent judges evidence, it does not execute it.** It checks that a named test
-  exists and covers the criterion; it trusts the test itself to be meaningful.
-- **Automatic merge is not implemented**, on purpose, and `workflow.allow-auto-merge` does nothing in
-  this version. `GitLabClient` has no merge method at all.
+No licence has been selected yet. Add a `LICENSE` file before inviting external contributors or publishing reusable code.
